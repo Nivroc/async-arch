@@ -78,4 +78,6 @@
 
 # Miro
 
-<iframe width="768" height="432" src="https://miro.com/app/live-embed/o9J_l5ZWzxE=/?moveToViewport=-4490,-5932,16259,8186&embedId=640100536207" frameborder="0" scrolling="no" allowfullscreen></iframe>
+https://miro.com/welcomeonboard/RjVJNVFyU3I2SEtLMEhpWHd6U2ZUY1BMZU1IVzZzZ1NZdUc1c3FBSm5HVE1tU21qNkNpNFNiNVdJQm9PWXAyaXwzMDc0NDU3MzQ2MDQ2NjYyOTUxfDI=?share_link_id=733413422784
+
+![image info](./Miro.png)
