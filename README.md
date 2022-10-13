@@ -14,7 +14,7 @@
   - Actor - User
   - Command - Access tasks
   - Data - Task Information (id, desc, status, assignee, cost, progress ect.)
-  - Event - User.fetchMyTasks
+  - Event - User.TasksFetched
 - Авторизация в таск-трекере должна выполняться через общий сервис авторизации UberPopug Inc (у нас там инновационная система авторизации на основе формы клюва).
     - Actor - User
     - Command - LoginToTT
@@ -24,7 +24,7 @@
     - Actor - User
     - Command - CreateTask
     - Data - Task Info (id, desc, status, assignee, cost, reward, progress ect.)
-    - Event - User.CreateTask
+    - Event - User.TaskCreated
 - Менеджеры или администраторы должны иметь кнопку «заассайнить задачи», которая возьмёт все открытые задачи и рандомно заассайнит каждую на любого из сотрудников (кроме менеджера и администратора) . Не успел закрыть задачу до реассайна — сорян, делай следующую.
     - Actor - Manager | Admin
     - Command - Shuffle
