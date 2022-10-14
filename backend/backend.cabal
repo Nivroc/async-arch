@@ -26,6 +26,7 @@ source-repository head
 executable auth
   main-is: Main.hs
   other-modules:
+      Database
       Model
       Paths_backend
   hs-source-dirs:
@@ -60,6 +61,7 @@ executable auth
     , uri-bytestring
     , uuid
     , validation-selective
+    , wai-cors
   default-language: Haskell2010
 
 executable provider
@@ -91,4 +93,5 @@ executable provider
     , uri-bytestring
     , uuid
     , validation-selective
+    , wai-cors
   default-language: Haskell2010

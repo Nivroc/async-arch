@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
-module Model(RuntimeConfig (..), ApplicationConfig(..), User(..), Role, Creds(..), Token(..), uuidL, validateUser, validateRoles) where
+module Model(RuntimeConfig (..), ApplicationConfig(..), User(..), Role, Creds(..), Token(..), ClientApp(..), uuidL, validateUser, validateRoles) where
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe ( isJust )
@@ -25,23 +25,25 @@ data ApplicationConfig = AppCfg { port :: Int,
                                   dbstring :: String, 
                                   schema :: String, 
                                   blacklist :: String, 
-                                  usertable:: String, 
+                                  usertable :: String, 
+                                  clienttable :: String,
                                   tokenexpiration:: Int
                                 } deriving (Show, Generic)
-
+                        
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 "" "asyncarch" "users" "blctokens" 0
+  configDef = AppCfg 8080 "" "asyncarch" "users" "blctokens" "registeredapps" 0
 
 data Role = Worker | Admin | Accountant | Manager deriving (Show, Read, Generic, FromJSON, ToJSON)
 data User = User { uuid :: Maybe String, login :: String, email :: String, secret :: String, roles :: [Role] } deriving (Show, Generic, FromJSON, ToRow, FromRow)
 uuidL :: Lens' User (Maybe String)
 uuidL = lens uuid (\usr newuuid -> usr { uuid = newuuid })
 
-data Creds = Creds { sub :: String, username :: String, password :: String } deriving (Show, Generic, FromJSON)
+data ClientApp = ClientApp { clientid :: String, clientSecret :: T.Text } deriving (Show, Generic, ToRow, FromRow, FromJSON)  
+data Creds = Creds { sub :: String, username :: String, password :: String, app :: ClientApp, redirect :: T.Text } deriving (Show, Generic, FromJSON)
 data Token = Token { token :: T.Text, expiresIn :: Int, assignedRoles :: [Role]} deriving (Show, Generic, FromJSON, ToJSON)
-
+  
 data UserEntryValidationError = EmptyName | ShortPassword | NoDigitPassword | InvalidEmail | NoRolesSet | EmptySecret deriving Show
 type UserValidation a = a -> Validation (NonEmpty UserEntryValidationError) a
 instance ToField Role where toField = toField . show
