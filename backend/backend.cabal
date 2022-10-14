@@ -23,14 +23,52 @@ source-repository head
   type: git
   location: https://github.com/githubuser/backend
 
+library
+  exposed-modules:
+      Common
+  other-modules:
+      Paths_backend
+  hs-source-dirs:
+      common
+  default-extensions:
+      OverloadedStrings
+      FlexibleInstances
+      FlexibleContexts
+      MultiParamTypeClasses
+      DeriveGeneric
+      DeriveAnyClass
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , conferer
+    , containers
+    , http-types
+    , jwt
+    , microlens
+    , mtl
+    , postgresql-simple
+    , regex-compat
+    , resourcet
+    , scotty
+    , smtp-mail
+    , text
+    , time
+    , transformers
+    , transformers-base
+    , uri-bytestring
+    , uuid
+    , validation-selective
+    , wai-cors
+  default-language: Haskell2010
+
 executable auth
   main-is: Main.hs
   other-modules:
-      Database
-      Model
-      Paths_backend
+      Database, Model, Common
   hs-source-dirs:
-      auth
+      auth, common
   default-extensions:
       OverloadedStrings
       FlexibleInstances
@@ -64,13 +102,20 @@ executable auth
     , wai-cors
   default-language: Haskell2010
 
-executable provider
+executable tasktracker
   main-is: Main.hs
   other-modules:
-      Paths_backend
+      Database, Model, Common
   hs-source-dirs:
-      task-tracker
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+      task-tracker, common
+  default-extensions:
+      OverloadedStrings
+      FlexibleInstances
+      FlexibleContexts
+      MultiParamTypeClasses
+      DeriveGeneric
+      DeriveAnyClass
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -ddump-simpl -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
   build-depends:
       aeson
     , base >=4.7 && <5

@@ -6,13 +6,11 @@ module Main(main) where
 
 import           Data.Text.Encoding                                          as T ( encodeUtf8 )
 import           Data.Text                                                   as T ( pack )
-import           Data.Aeson (decode, FromJSON, toJSON)
+import           Data.Aeson (toJSON)
 import qualified Data.Text.Lazy                                              as LText
-import qualified Data.Text.Lazy.Encoding                                     as LText
 import           Data.Maybe ( isJust, listToMaybe )
 import           Data.UUID.V4 (nextRandom)
 import           Data.UUID (toString)
-import           Data.ByteString.Lazy.Internal ( ByteString )
 import           Data.Time.Clock.POSIX ( getPOSIXTime )
 import qualified Data.Map.Strict                                             as M
 
@@ -25,35 +23,32 @@ import           Control.Monad.Except ( MonadError(throwError) )
 import           Web.Scotty.Trans
 import           Web.Scotty.Internal.Types( ActionError(ActionError) )
 import qualified Web.JWT                                                     as J
-import           Network.HTTP.Types(status500, Status)
+import           Network.HTTP.Types(status500)
 import           Network.HTTP.Types.Status ( status422, status400 )
 import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, Only(fromOnly) )
 import           Lens.Micro ( (?~) )
 import           Model
 import           Database
-import           Network.Wai.Middleware.Cors
 import           GHC.Base ((<|>))
+import           Common
 
 
 main :: IO ()
 main = do config <- addSource (PF.fromFilePath "./configs/auth.properties") emptyConfig
           mainApp <- fetch config :: IO ApplicationConfig
-          runResourceT (runReaderT program mainApp)
+          runResourceT (runReaderT programP mainApp)
 
-program :: (MonadIO m, MonadReader ApplicationConfig m, MonadResource m) => m ()
-program = do config <- ask
-             (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring config)) ((*> Prelude.putStrLn "connection closed") . close)
-             let runtime = RtConfig config conn
-             liftIO $ print config
-             scottyT (port config) (`runReaderT` runtime) Main.routes
+programP :: (MonadIO m, MonadReader ApplicationConfig m, MonadResource m) => m ()
+programP = do config <- ask
+              (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring config)) ((*> Prelude.putStrLn "connection closed") . close)
+              let runtime = RtConfig config conn
+              liftIO $ print config
+              scottyT (port config) (`runReaderT` runtime) Main.routes
 
 routes :: (MonadReader RuntimeConfig m, MonadIO m, MonadPlus m) => ScottyT LText.Text m ()
-routes = do middleware $ cors $ const $ Just simpleCorsResourcePolicy {
-              corsRequestHeaders = "authorization":simpleHeaders,
-              corsMethods = "POST":"PUT":"DELETE":simpleMethods
-            }
+routes = do midware
             defaultHandler $ \str -> status status500 *> json str
-
+  
             delete "/user/:username" $ do
               user <- param "username"
               code <- deleteUser user
@@ -127,6 +122,3 @@ authSigned creds usr = let rol = J.ClaimsMap $ M.fromList [(T.pack "roles", toJS
                        in do time <- liftIO getPOSIXTime
                              expire <- asks (tokenexpiration . cfg)
                              return $ Token (tok . J.numericDate $ (fromIntegral expire + time)) expire (roles usr)
-
-decodeOrThrow :: (MonadError (ActionError LText.Text) m, FromJSON a) => m ByteString -> Status -> m a
-decodeOrThrow b s = b >>= \bb -> maybe (throwError $ ActionError s ("Error: " <> LText.decodeUtf8 bb <> " cannot be decoded")) pure (decode bb)
