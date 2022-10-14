@@ -32,6 +32,7 @@ import           Lens.Micro ( (?~) )
 import           Model
 import           Database
 import           Network.Wai.Middleware.Cors
+import           GHC.Base ((<|>))
 
 
 main :: IO ()
@@ -46,7 +47,7 @@ program = do config <- ask
              liftIO $ print config
              scottyT (port config) (`runReaderT` runtime) Main.routes
 
-routes :: (MonadReader RuntimeConfig m, MonadIO m) => ScottyT LText.Text m ()
+routes :: (MonadReader RuntimeConfig m, MonadIO m, MonadPlus m) => ScottyT LText.Text m ()
 routes = do middleware $ cors $ const $ Just simpleCorsResourcePolicy {
               corsRequestHeaders = "authorization":simpleHeaders,
               corsMethods = "POST":"PUT":"DELETE":simpleMethods
@@ -71,12 +72,16 @@ routes = do middleware $ cors $ const $ Just simpleCorsResourcePolicy {
               dbcode <- updateRoles newRoles ulogin
               json $ show dbcode <> " roles of user " <> show ulogin <> " updated to " <> show newRoles
 
+            let validateApp bod = do mcli <- listToMaybe <$> fetchClient bod
+                                     maybe (throwError $ ActionError status422 "No such client app registered") pure mcli  
+
             post    "/user/auth"  $ do
               bod :: Creds <- decodeOrThrow body status400
               usr <- findUser $ username bod
-              mcli <- listToMaybe <$> (fetchClient . T.pack . clientid . app  $ bod)
-              _ <- maybe (throwError $ ActionError status422 "No such client app registered") pure mcli
-              if secret usr == password bod then authSigned bod usr else json $ show ("Incorrect password" :: String)
+              _ <- validateApp . T.pack . clientid . app $ bod
+              if secret usr == password bod
+              then (authSigned bod usr >>= tokenToHeaders) <|> (Web.Scotty.Trans.redirect . LText.fromStrict . Model.redirect $ bod)
+              else json $ show ("Incorrect password" :: String)
 
             get     "/user/all"       $ fetchUsers >>= json . ("users recovered:\n" <>) . show
             get     "/user/:username" $ param "username" >>= findUser >>= json . ("User found: " <>) . show
@@ -84,8 +89,7 @@ routes = do middleware $ cors $ const $ Just simpleCorsResourcePolicy {
             let auth clientId = do let err = throwError $ ActionError status400 "Error: no 'authorization' header"
                                    tokenText <- LText.toStrict . LText.drop 7 <$> (header "authorization" >>= maybe err pure)
                                    let er = throwError $ ActionError status422 "Auth JWT cannot be decoded"
-                                   mcli <- listToMaybe <$> fetchClient (T.pack clientId)
-                                   cli <- maybe (throwError $ ActionError status422 "No such client app registered") pure mcli
+                                   cli <- validateApp $ T.pack clientId
                                    tok <- maybe er pure (J.decodeAndVerifySignature (J.toVerify . J.hmacSecret $ clientSecret cli) tokenText)
                                    valid <- tokenExists tokenText >>= \e -> flip (&&) (not $ and $ fromOnly <$> e) <$> liftIO (checkClaims tok)
                                    if valid then pure $ Just tokenText else pure Nothing
@@ -104,6 +108,10 @@ routes = do middleware $ cors $ const $ Just simpleCorsResourcePolicy {
                                                    _ <- param "clientid" >>= insertClient . flip ClientApp secr
                                                    text $ LText.fromStrict secr
 
+tokenToHeaders :: (MonadPlus m) => Token -> ActionT LText.Text m ()
+tokenToHeaders tok = setHeader "authorization" (LText.fromStrict $ token tok) <|>
+                     setHeader "expires" (LText.pack $ show $ expiresIn tok) <|>
+                     setHeader "roles" (LText.pack $ show $ assignedRoles tok)
 
 checkClaims :: J.JWT J.VerifiedJWT -> IO Bool
 checkClaims t = getPOSIXTime >>= \curr -> let checkIssuer = (== "PapugAuth") . J.stringOrURIToText <$> J.iss (J.claims t)
@@ -112,13 +120,13 @@ checkClaims t = getPOSIXTime >>= \curr -> let checkIssuer = (== "PapugAuth") . J
                                                   (Just True, Just True) -> pure True
                                                   _ -> pure False
 
-authSigned :: (MonadReader RuntimeConfig m, MonadIO m) => Creds -> User -> ActionT LText.Text m ()
+authSigned :: (MonadReader RuntimeConfig m, MonadIO m) => Creds -> User -> m Token
 authSigned creds usr = let rol = J.ClaimsMap $ M.fromList [(T.pack "roles", toJSON $ roles usr)]
                            uns t = (mempty {J.iss = J.stringOrURI "PapugAuth", J.exp = t, J.unregisteredClaims = rol})
                            tok t = J.encodeSigned (J.hmacSecret $ clientSecret $ app creds) mempty (uns t)
                        in do time <- liftIO getPOSIXTime
                              expire <- asks (tokenexpiration . cfg)
-                             json $ Token (tok . J.numericDate $ (fromIntegral expire + time)) expire (roles usr)
+                             return $ Token (tok . J.numericDate $ (fromIntegral expire + time)) expire (roles usr)
 
 decodeOrThrow :: (MonadError (ActionError LText.Text) m, FromJSON a) => m ByteString -> Status -> m a
 decodeOrThrow b s = b >>= \bb -> maybe (throwError $ ActionError s ("Error: " <> LText.decodeUtf8 bb <> " cannot be decoded")) pure (decode bb)
