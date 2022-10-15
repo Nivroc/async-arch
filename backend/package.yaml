@@ -19,6 +19,14 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/githubuser/backend#readme>
 
+default-extensions:
+  - OverloadedStrings
+  - FlexibleInstances
+  - FlexibleContexts
+  - MultiParamTypeClasses
+  - DeriveGeneric
+  - DeriveAnyClass  
+
 dependencies:
 - base >= 4.7 && < 5
 - aeson
@@ -41,6 +49,11 @@ dependencies:
 - bytestring
 - containers
 - time
+- wai-cors
+
+library:
+  source-dirs: common
+  exposed-modules: Common
 
 ghc-options:
 - -Wall
@@ -55,7 +68,9 @@ ghc-options:
 executables:
   auth:
     main:        Main.hs
-    source-dirs: auth
+    source-dirs: auth, common
+    exposed-modules: Main
+    other-modules: Database, Model, Common
     ghc-options:
     - -threaded
     - -rtsopts
@@ -65,20 +80,20 @@ executables:
     - -dsuppress-all 
     - -dno-suppress-type-signatures 
     - -ddump-to-file
-    default-extensions:
-    - OverloadedStrings
-    - FlexibleInstances
-    - FlexibleContexts
-    - MultiParamTypeClasses
-    - DeriveGeneric
-    - DeriveAnyClass  
-  provider:
+  tasktracker:
     main:        Main.hs
-    source-dirs: task-tracker
+    source-dirs: task-tracker, common
+    exposed-modules: Main
+    other-modules: Database, Model, Common
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -O2 
+    - -ddump-simpl
+    - -dsuppress-all 
+    - -dno-suppress-type-signatures 
+    - -ddump-to-file
 
 
 
