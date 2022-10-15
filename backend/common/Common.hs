@@ -27,7 +27,7 @@ import           Network.Wai.Middleware.Cors
 import           Web.Scotty.Trans (middleware)
 
 
-data Role = Worker | Admin | Accountant | Manager deriving (Show, Read, Generic, FromJSON, ToJSON)
+data Role = Worker | Admin | Accountant | Manager deriving (Eq, Show, Read, Generic, FromJSON, ToJSON)
 
 instance ToField Role where toField = toField . show
 instance FromField Role where fromField f dat = read <$> fromField f dat

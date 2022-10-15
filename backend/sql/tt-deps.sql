@@ -10,7 +10,7 @@ CREATE TABLE asyncarch.tasks (
     id          varchar(20),
     name        varchar(50), 
     desc        varchar(3000),
-    status      varchar(15),
+    open        boolean,
     assignee    varchar(50)
 
     CONSTRAINT t1 UNIQUE (uuid),
