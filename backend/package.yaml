@@ -43,10 +43,14 @@ dependencies:
 - containers
 - time
 - wai-cors
+- amqp
+- unliftio-core
 
 library:
   source-dirs: common
-  exposed-modules: Common
+  exposed-modules: 
+  - Common 
+  - Rabbit
 
 ghc-options:
 - -Wall
@@ -61,9 +65,10 @@ ghc-options:
 executables:
   auth:
     main:        Main.hs
-    source-dirs: auth, common
-    exposed-modules: Main
-    other-modules: Database, Model, Common
+    source-dirs: 
+    - auth
+    - common
+    other-modules: Database, Model, Common, Rabbit
     ghc-options:
     - -threaded
     - -rtsopts
@@ -75,9 +80,10 @@ executables:
     - -ddump-to-file
   tasktracker:
     main:        Main.hs
-    source-dirs: task-tracker, common
-    exposed-modules: Main
-    other-modules: Database, Model, Common
+    source-dirs: 
+    - task-tracker
+    - common
+    other-modules: Database, Model, Common, Rabbit
     ghc-options:
     - -threaded
     - -rtsopts

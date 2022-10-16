@@ -18,6 +18,13 @@ packages:
       size: 1160
   original:
     hackage: selective-0.4.2@sha256:d223434ba4545a09b02dbdc7a4d63bd41ef40cc3d3d82883ccc6daea9d2b2dd5,3507
+- completed:
+    hackage: unix-2.7.2.2@sha256:15f5365c5995634e45de1772b9504761504a310184e676bc2ef60a14536dbef9,3496
+    pantry-tree:
+      sha256: 36434ced74d679622d61b69e8d92e1bd632d9ef3e284c63094653b2e473b0553
+      size: 3536
+  original:
+    hackage: unix-2.7.2.2@sha256:15f5365c5995634e45de1772b9504761504a310184e676bc2ef60a14536dbef9,3496
 snapshots:
 - completed:
     sha256: 1ecad1f0bd2c27de88dbff6572446cfdf647c615d58a7e2e2085c6b7dfc04176

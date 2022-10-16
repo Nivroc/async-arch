@@ -18,15 +18,18 @@ import Lens.Micro
 import Conferer (FromConfig, DefaultConfig(configDef))
 import Common
 import Control.Arrow ((&&&))
+import Network.AMQP (Channel)
+import Rabbit
 
-data RuntimeConfig = RtConfig {cfg :: ApplicationConfig, dbConnection :: Connection} deriving (Generic)
+data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, rmqchan :: Channel } deriving (Generic)
 data ApplicationConfig = AppCfg { port :: Int, 
                                   dbstring :: String, 
                                   schema :: String, 
                                   blacklist :: String, 
                                   usertable :: String, 
                                   clienttable :: String,
-                                  tokenexpiration:: Int
+                                  tokenexpiration :: Int,
+                                  userhub :: UserEventHub
                                 } deriving (Show, Generic)
 
 instance DBConnect RuntimeConfig where
@@ -36,10 +39,10 @@ instance DBConnect RuntimeConfig where
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 "" "asyncarch" "users" "blctokens" "registeredapps" 0
+  configDef = AppCfg 8080 "" "asyncarch" "users" "blctokens" "registeredapps" 0 configDef
 
 
-data User = User { uuid :: Maybe String, login :: String, email :: String, secret :: String, roles :: [Role] } deriving (Show, Generic, FromJSON, ToRow, FromRow)
+data User = User { uuid :: Maybe String, login :: String, email :: String, secret :: String, roles :: [Role] } deriving (Show, Generic, FromJSON, ToJSON, ToRow, FromRow)
 uuidL :: Lens' User (Maybe String)
 uuidL = lens uuid (\usr newuuid -> usr { uuid = newuuid })
 

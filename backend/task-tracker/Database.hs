@@ -10,6 +10,7 @@ import           Database.PostgreSQL.Simple
 import           Model     
 import           Common      
 import           Data.UUID (UUID)
+import           Control.Monad.Reader
 
 -- Походы в базу
 
@@ -18,6 +19,12 @@ addTask u = do simpleDB (tasktable . cfg)
                         (\ table -> toQuery $ "insert into " <> table <> " (uuid, id, name, desc, status, assignee) values (?,?,?,?,?,?)" )
                         (\ q c -> execute c q u)
 
+addUser :: (MonadIO m, MonadReader RuntimeConfig m) => String -> m Int64
+addUser u = do rt <- ask
+               let table = schematable rt (usertable . cfg) 
+               let q = toQuery $ "insert into " <> table <> " (uuid, fullname) values (?, '')"
+               liftIO $ execute (dbConnection rt) q (Only u)
+    
 closeTask :: DBConstraints m RuntimeConfig => UUID -> m Int64
 closeTask u = do simpleDB (tasktable . cfg) 
                           (\ table -> toQuery $ "update " <> table <> " set status = False where uuid = (?)" )

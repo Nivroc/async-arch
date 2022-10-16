@@ -1,7 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# LANGUAGE MonoLocalBinds #-}
+
 module Main where
 
-import           Data.Text.Encoding                                          as T ( encodeUtf8 )
+import           Data.Text.Encoding                                          as T ( encodeUtf8)
 import           Data.Text                                                   as T ( pack )
 import qualified Data.Text.Lazy                                              as TL
 import           Data.UUID.V4 (nextRandom)
@@ -9,8 +12,9 @@ import           Data.UUID (fromText)
 import           Data.Maybe (listToMaybe)
 import           Data.Aeson (fromJSON, Result (Error, Success))
 import           Data.Aeson.Types (ToJSON(..))
+import qualified Data.ByteString.Lazy.Char8                                  as BL
 import qualified Data.Map
-                                            
+
 import           Conferer.Config.Internal ( emptyConfig, addSource )
 import           Conferer ( fetch )
 import qualified Conferer.Source.PropertiesFile                              as PF
@@ -22,24 +26,38 @@ import           Control.Applicative (Applicative(..))
 import           Web.Scotty.Trans
 import           Web.Scotty.Internal.Types (ActionError(..))
 import           Network.HTTP.Types(status500, status400, status422)
-import qualified Web.JWT                                                     as J       
+import           Network.AMQP
+import qualified Web.JWT                                                     as J
 import           Database.PostgreSQL.Simple ( close, connectPostgreSQL )
 import           Database.PostgreSQL.Simple.Types (Only(..))
-
 import           Database
 import           Model
 import           Common
+import           Rabbit (setupRabbit, UserEventHub (queue))
+import           Control.Monad.IO.Unlift
+import qualified Data.Text.Lazy.Encoding as TL
 
 main :: IO ()
 main = do config <- addSource (PF.fromFilePath "./configs/tasktracker.properties") emptyConfig
           mainApp <- fetch config :: IO ApplicationConfig
           runResourceT (runReaderT program mainApp)
 
-program :: (MonadIO m, MonadReader ApplicationConfig m, MonadResource m) => m ()
+-- TODO: вместо UnliftIO предложить в resourcet инстанс MonadBaseControl IO (ResourceT IO) 
+-- TODO: из чувства перфекционизма хорошо бы ловить IO эксепшены и nackать сообщения 
+registerUser :: (MonadIO m, MonadReader RuntimeConfig m, MonadUnliftIO m) => (Message, Envelope) -> m ()
+registerUser (msg, env) = do unl <- askRunInIO
+                             liftIO $ do putStrLn $ "received message: " ++ BL.unpack (msgBody msg)
+                                         unl $ addUser $ TL.unpack . TL.decodeUtf8 . msgBody $ msg
+                                         ackEnv env
+-- На случай важных переговоров maybe (putStrLn "Message cannot be decoded" *> nackEnv env) (unl . void . addUser)
+
+
+program :: (MonadReader ApplicationConfig m, MonadResource m) => m ()
 program = do config <- ask
              (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring config)) ((*> Prelude.putStrLn "connection closed") . close)
-             let runtime = RtConfig config conn
-             liftIO $ print config
+             chan <- setupRabbit "./configs/rabbitmq.properties"
+             let runtime = RtConfig config conn chan
+             liftIO $ consumeMsgs chan (T.pack . queue $ userhub config) Ack ((`runReaderT` runtime) . registerUser )
              scottyT (port config) (`runReaderT` runtime) Main.routes
 
 routes :: (MonadReader RuntimeConfig m, MonadIO m) => ScottyT TL.Text m ()
@@ -61,8 +79,8 @@ routes = do midware
 
             --TODO: отсылаем кафка эвент
             get "/assigned/:userid" $ do hasRights <- hasRole Worker
-                                         if hasRights 
-                                         then json =<< ((toJSON <$>) . fetchTasks ) =<< (maybe (err "task id sent is not uuid") pure . fromText) =<< param "userid" 
+                                         if hasRights
+                                         then json =<< ((toJSON <$>) . fetchTasks ) =<< (maybe (err "task id sent is not uuid") pure . fromText) =<< param "userid"
                                          else err "Your beak is not pointy enough to do that"
 
             put "/shuffle" $ do hasRights <- liftA2 (||) (hasRole Admin) (hasRole Manager)
@@ -82,9 +100,3 @@ routes = do midware
                                   -- отсылаем кафка эвент
                                   text "Success"
                                 else err "Assignee not found"
-
---TODO: get kafka event and add user
-registerUser = undefined
-
---TODO: get kafka event and remove user
-removeUser = undefined

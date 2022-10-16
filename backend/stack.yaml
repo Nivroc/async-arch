@@ -43,6 +43,7 @@ packages:
 extra-deps:
 - validation-selective-0.1.0.1@sha256:9a5aa8b801efc6a4ffb120e1b28e80c5f7d090043be56bba11222cd20c393044,3621
 - selective-0.4.2@sha256:d223434ba4545a09b02dbdc7a4d63bd41ef40cc3d3d82883ccc6daea9d2b2dd5,3507
+- unix-2.7.2.2@sha256:15f5365c5995634e45de1772b9504761504a310184e676bc2ef60a14536dbef9,3496
 
 
 # Override default flag values for local packages and extra-deps
