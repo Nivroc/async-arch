@@ -69,6 +69,7 @@ routes sem = do
             midware
             defaultHandler $ \str -> status status500 *> json str
 
+            --Только лишь чекать что он декодится не ок потому что он может истечь или быть залогаутеным? Переделать на поход в auth?
             let auth = do let err = throwError $ ActionError status400 "Error: no 'authorization' header"
                           tokenText <- TL.toStrict . TL.drop 7 <$> (header "authorization" >>= maybe err pure)
                           let er = throwError $ ActionError status422 "Auth JWT cannot be decoded"
@@ -84,7 +85,7 @@ routes sem = do
                                             Error s -> err s
                                             Success ros -> pure $ elem role ros
 
-            --TODO: отсылаем кафка эвент
+            --TODO: отсылаем эвент
             get "/assigned/:userid" $ do tok <- auth
                                          hasRights <- hasRole tok Worker
                                          if hasRights
@@ -95,12 +96,12 @@ routes sem = do
                                 hasRights <- liftA2 (||) (hasRole tok Admin) (hasRole tok Manager)
                                 if hasRights 
                                 then bracket_ (waitQSem sem) (signalQSem sem) ( bracket (count =<< shuffleView "test") (dropTempTable . fst) (uncurry sendUpdates) ) 
-                                else err "Your beak is not pointy enough to do that"  -- и послать эвенты в кафку   
+                                else err "Your beak is not pointy enough to do that"
 
             put "/close/:taskid" $ do _ <- auth
                                       tid <- maybe (err "task id sent is not uuid") pure . fromText =<< param "taskid"
                                       rowsAff <- closeTask tid
-                                      if rowsAff == 0 then text "No such task exists" else text "Success" -- <* кафка эвент
+                                      if rowsAff == 0 then text "No such task exists" else text "Success" -- <* эвент
 
             post "/create" $ do _ <- auth
                                 task :: Task <- jsonData
@@ -108,7 +109,6 @@ routes sem = do
                                 userPresent <- checkUserExistsTask (assignee task) >>= maybe (err "Assignee not found") pure . listToMaybe . (fromOnly <$>)
                                 if userPresent then do
                                   _ <- addTask $ task { taskuuid = Just newUUID, open = True }
-                                  -- отсылаем кафка эвент
                                   text "Success"
                                 else err "Assignee not found"
 
