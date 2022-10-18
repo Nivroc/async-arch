@@ -38,7 +38,6 @@ import           Rabbit (setupRabbit, UserEventHub (..))
 import qualified Data.Text.Lazy.Encoding as TL
 
 
-
 main :: IO ()
 main = do config <- addSource (PF.fromFilePath "./configs/auth.properties") emptyConfig
           mainApp <- fetch config :: IO ApplicationConfig
@@ -46,7 +45,7 @@ main = do config <- addSource (PF.fromFilePath "./configs/auth.properties") empt
 
 programP :: (MonadIO m, MonadReader ApplicationConfig m, MonadResource m) => m ()
 programP = do config <- ask
-              (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring config)) ((*> Prelude.putStrLn "connection closed") . close)
+              (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring $ postgres config)) ((*> Prelude.putStrLn "connection closed") . close)
               chan <- setupRabbit "./configs/rabbitmq.properties"
               let runtime = RtConfig config conn chan
               liftIO $ print config
@@ -116,7 +115,7 @@ sendUserCreated :: (MonadReader RuntimeConfig m, MonadIO m) => User -> ActionT T
 sendUserCreated usr = do (exc, routingKey) <- asks ((T.pack . exchange &&& T.pack . key) . userhub . cfg) 
                          chan <- asks rmqchan 
                          let e = throwError $ ActionError status400 "This is an impossible state in our application. If you are seeing this please contact noone."
-                         maybe e (\x -> liftIO $ publishMsg chan exc routingKey (newMsg {msgBody = TL.encodeUtf8 . TL.pack . show $ x})) (uuid usr)
+                         maybe e (\x -> liftIO $ publishMsg chan exc routingKey (newMsg {msgBody = TL.encodeUtf8 . TL.pack $ x})) (uuid usr)
 
 tokenToHeaders :: (MonadPlus m) => Token -> ActionT TL.Text m ()
 tokenToHeaders tok = setHeader "authorization" (TL.fromStrict $ token tok) <|>

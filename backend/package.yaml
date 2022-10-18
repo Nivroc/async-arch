@@ -45,6 +45,8 @@ dependencies:
 - wai-cors
 - amqp
 - unliftio-core
+- lifted-base
+- monad-control
 
 library:
   source-dirs: common

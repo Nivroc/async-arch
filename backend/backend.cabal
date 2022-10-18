@@ -48,7 +48,9 @@ library
     , containers
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
     , regex-compat
@@ -90,7 +92,9 @@ executable auth
     , containers
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
     , regex-compat
@@ -132,7 +136,9 @@ executable tasktracker
     , containers
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
     , regex-compat

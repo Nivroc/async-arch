@@ -17,7 +17,7 @@ import           Model
 import           Common        
 
 ut :: RuntimeConfig -> String
-ut = usertable . cfg
+ut = usertable . postgres . cfg
 
 deleteUser :: DBConstraints m RuntimeConfig => String -> m Int64
 deleteUser uid = simpleDB ut (\ table -> toQuery $ "delete from " <> table <> " where login = ?" )
@@ -45,25 +45,25 @@ updateRoles r l = do validRoles <- liftEither . either (throwError . ActionError
                                  (\ q c -> execute c q (validRoles, l))
 
 tokenExists :: DBConstraints m RuntimeConfig => T.Text -> m [Only Bool]
-tokenExists tok = simpleDB (blacklist . cfg) 
+tokenExists tok = simpleDB (blacklist . postgres . cfg) 
                            (\ table -> toQuery $ "select exists(select token from " <> table <> " where token = (?) )")
                            (\ q c -> query c q (Only $ T.unpack tok))
 
 blacklistToken :: DBConstraints m RuntimeConfig => T.Text -> m Int64                              
-blacklistToken tok = simpleDB (blacklist . cfg) 
+blacklistToken tok = simpleDB (blacklist . postgres . cfg) 
                               (\ table -> toQuery $ "insert into " <> table <> " (token) values (?)")
                               (\ q c -> execute c q (Only tok))
 
 insertClient :: DBConstraints m RuntimeConfig => ClientApp -> m Int64
-insertClient cli = simpleDB (clienttable . cfg) 
+insertClient cli = simpleDB (clienttable . postgres . cfg) 
                             (\ table -> toQuery $ "insert into " <> table <> " (clientid, clientsecret) values (?,?)")
                             (\ q c -> execute c q cli)
 
 fetchClient :: DBConstraints m RuntimeConfig => T.Text -> m [ClientApp]
-fetchClient cli = simpleDB (clienttable . cfg) (\ table -> toQuery $ "select clientid, clientsecret from " <> table <> " where clientid = (?)")
+fetchClient cli = simpleDB (clienttable . postgres . cfg) (\ table -> toQuery $ "select clientid, clientsecret from " <> table <> " where clientid = (?)")
                                        (\ q c -> query c q (Only cli))
 
 deleteClient :: DBConstraints m RuntimeConfig => T.Text -> m Int64
-deleteClient cli = simpleDB (clienttable . cfg) 
+deleteClient cli = simpleDB (clienttable . postgres . cfg) 
                             (\ table -> toQuery $ "delete from " <> table <> " where clientid = (?)")
                             (\ q c -> execute c q (Only $ T.unpack cli))

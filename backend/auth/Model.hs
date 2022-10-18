@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
-module Model(RuntimeConfig (..), ApplicationConfig(..), User(..), Role, Creds(..), Token(..), ClientApp(..), uuidL, validateUser, validateRoles) where
+module Model(RuntimeConfig (..), ApplicationConfig(..), PostgresSettings(..), User(..), Role, Creds(..), Token(..), ClientApp(..), uuidL, validateUser, validateRoles) where
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe ( isJust )
@@ -23,23 +23,27 @@ import Rabbit
 
 data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, rmqchan :: Channel } deriving (Generic)
 data ApplicationConfig = AppCfg { port :: Int, 
-                                  dbstring :: String, 
-                                  schema :: String, 
-                                  blacklist :: String, 
-                                  usertable :: String, 
-                                  clienttable :: String,
+                                  postgres :: PostgresSettings,
                                   tokenexpiration :: Int,
                                   userhub :: UserEventHub
                                 } deriving (Show, Generic)
 
+data PostgresSettings = PSettings {dbstring :: String, schema :: String, blacklist :: String, usertable :: String, clienttable :: String } deriving (Show, Generic)
+
 instance DBConnect RuntimeConfig where
-  schematable rt tbl = uncurry ((<>) . (<> ".")) . (schema . cfg &&& tbl) $ rt
+  schematable :: RuntimeConfig -> (RuntimeConfig -> String) -> String
+  schematable rt tbl = uncurry ((<>) . (<> ".")) . (schema . postgres . cfg &&& tbl) $ rt
   connection = dbConnection
-                       
+
+instance FromConfig PostgresSettings
+instance DefaultConfig PostgresSettings where
+  configDef :: PostgresSettings
+  configDef = PSettings "" "asyncarch" "users" "blctokens" "registeredapps"
+
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 "" "asyncarch" "users" "blctokens" "registeredapps" 0 configDef
+  configDef = AppCfg 8080 configDef 0 configDef
 
 
 data User = User { uuid :: Maybe String, login :: String, email :: String, secret :: String, roles :: [Role] } deriving (Show, Generic, FromJSON, ToJSON, ToRow, FromRow)
