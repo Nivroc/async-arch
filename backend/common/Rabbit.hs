@@ -2,8 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Rabbit(setupRabbit, UserEventHub (..)) where
-    
+module Rabbit(RabbitConfig(..), TaskEventHub(..), setupRabbit, UserEventHub (..), getConnection) where
+
 import Network.AMQP
 import Control.Monad.Trans
 import qualified Conferer.Source.PropertiesFile as PF
@@ -13,24 +13,53 @@ import Conferer
 import GHC.Generics
 import Control.Monad.Trans.Resource ( allocate, MonadResource )
 import qualified Data.Text as T
+import Control.Exception (bracket)
 
-data RabbitConfig = RabbitConfig { connectionString :: String, userhub :: UserEventHub } deriving (Show, Generic)
-data UserEventHub = UserEventHub { queue :: String, exchange :: String, key :: String} deriving (Show, Generic) -- TODO: сделать bindings для понимания что как раутить
-instance FromConfig UserEventHub
-instance DefaultConfig UserEventHub where
-  configDef = UserEventHub "" "" ""
+data RabbitConfig = RabbitConfig { connectionString :: String, userhub :: UserEventHub, taskhub :: TaskEventHub } deriving (Show, Generic)
 instance FromConfig RabbitConfig
 instance DefaultConfig RabbitConfig where
-  configDef = RabbitConfig "" configDef
+  configDef = RabbitConfig "" configDef configDef
 
-setupRabbit :: MonadResource m => String -> m Channel
-setupRabbit cfgPath = do    
+data UserEventHub = UserEventHub { ttqueue :: String, acqueue :: String, userexchange :: String, key :: String} deriving (Show, Generic) -- TODO: сделать bindings для понимания что как раутить
+instance FromConfig UserEventHub
+instance DefaultConfig UserEventHub where
+  configDef = UserEventHub "" "" "" ""
+
+data TaskEventHub = TaskEventHub { taskexchange :: String, 
+                                   crtqueue :: String, crtkey :: String,
+                                   cltqueue :: String, cltkey :: String } deriving (Show, Generic)
+instance FromConfig TaskEventHub
+instance DefaultConfig TaskEventHub where
+  configDef = TaskEventHub "" "" "" "" ""                                    
+
+
+setupRabbit :: MonadResource m => String -> m ()
+setupRabbit cfgPath = do
     config <- liftIO $ addSource (PF.fromFilePath cfgPath) emptyConfig
-    rabbitCfg :: RabbitConfig <- liftIO $ fetch config 
-    (_, conn) <- allocate (openConnection'' $ fromURI $ connectionString rabbitCfg) closeConnection
-    chan <- liftIO $ openChannel conn
-    let ex = T.pack $ exchange . userhub $ rabbitCfg
-    liftIO $ do declareQueue chan newQueue { queueName = T.pack $ queue . userhub $ rabbitCfg }
-                declareExchange chan newExchange {exchangeName = ex, exchangeType = "topic"}
-                bindQueue chan (T.pack $ queue . userhub $ rabbitCfg) ex (T.pack . key . userhub $ rabbitCfg)
-    return chan
+    rabbitCfg :: RabbitConfig <- liftIO $ fetch config
+    liftIO $ print rabbitCfg
+    liftIO $ bracket (openConnection'' (fromURI $ connectionString rabbitCfg)) ((putStrLn "Rabbit setup done" <*). closeConnection) 
+      (\c -> do
+        conn <- openChannel c
+
+        let createQBind q e k = do declareQueue conn newQueue { queueName = T.pack q }
+                                   bindQueue conn (T.pack q) (T.pack e) (T.pack k)
+
+        let createQEXBind q e k = do declareExchange conn newExchange {exchangeName = T.pack e, exchangeType = "topic"} 
+                                     createQBind q e k
+
+        --users
+        createQEXBind (ttqueue . userhub $ rabbitCfg) (userexchange . userhub $ rabbitCfg) (key . userhub $ rabbitCfg) 
+        createQBind (acqueue . userhub $ rabbitCfg) (userexchange . userhub $ rabbitCfg) (key . userhub $ rabbitCfg) 
+
+        --tasks
+        createQEXBind (crtqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (crtkey . taskhub $ rabbitCfg) 
+        createQBind (cltqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (cltkey . taskhub $ rabbitCfg)
+      )
+
+getConnection :: MonadResource m => String -> m Connection
+getConnection cfgPath = do
+  config <- liftIO $ addSource (PF.fromFilePath cfgPath) emptyConfig     
+  rabbitCfg :: RabbitConfig <- liftIO $ fetch config
+  (_, conn) <- allocate (openConnection'' (fromURI $ connectionString rabbitCfg)) closeConnection
+  return conn 

@@ -18,10 +18,10 @@ import Lens.Micro
 import Conferer (FromConfig, DefaultConfig(configDef))
 import Common
 import Control.Arrow ((&&&))
-import Network.AMQP (Channel)
+import qualified Network.AMQP as AMQP
 import Rabbit
 
-data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, rmqchan :: Channel } deriving (Generic)
+data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, conn :: AMQP.Connection} deriving (Generic)
 data ApplicationConfig = AppCfg { port :: Int, 
                                   postgres :: PostgresSettings,
                                   tokenexpiration :: Int,
