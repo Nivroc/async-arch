@@ -1,5 +1,6 @@
 CREATE TABLE asyncarch.ttusers (
     uuid        varchar(50) PRIMARY KEY, 
+    roles       varchar(10)[],
     fullname    varchar(25), 
 
     CONSTRAINT t UNIQUE (uuid)

@@ -8,7 +8,7 @@ import Data.Aeson (FromJSON, ToJSON, decode)
 
 import           Database.PostgreSQL.Simple.FromField ( FromField(..) )
 import           Database.PostgreSQL.Simple.ToField ( ToField(..) )
-import           Database.PostgreSQL.Simple.Types 
+import           Database.PostgreSQL.Simple.Types
     (PGArray (PGArray, fromPGArray), Query (Query))
 import           Data.Text.Encoding                                          as T ( encodeUtf8 )
 import           Data.Text                                                   as T ( pack )
@@ -25,7 +25,6 @@ import           Control.Exception (try)
 import           Network.HTTP.Types.Status
 import           Network.Wai.Middleware.Cors
 import           Web.Scotty.Trans (middleware)
-
 
 data Role = Worker | Admin | Accountant | Manager deriving (Eq, Show, Read, Generic, FromJSON, ToJSON)
 
@@ -57,3 +56,9 @@ midware = middleware $ cors $ const $ Just simpleCorsResourcePolicy {
               corsRequestHeaders = "authorization":simpleHeaders,
               corsMethods = "POST":"PUT":"DELETE":simpleMethods
             }
+
+justOrLift :: MonadError (ActionError TL.Text) m => Status -> String -> m (Maybe a) ->  m a
+justOrLift s str = (=<<) (maybe (throwError $ ActionError s (TL.pack str)) pure) 
+
+justOrAbsorb :: MonadError (ActionError TL.Text) m => Status -> String -> Maybe a ->  m a
+justOrAbsorb s str = maybe (throwError $ ActionError s (TL.pack str)) pure 

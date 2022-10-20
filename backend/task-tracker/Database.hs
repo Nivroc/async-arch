@@ -11,20 +11,20 @@ import           Model
 import           Common
 import           Data.UUID (UUID)
 import           Control.Monad.Reader
-import Data.Functor (($>))
+import           Data.Functor (($>))
 
 -- Походы в базу
 
 addTask :: DBConstraints m RuntimeConfig => Task -> m Int64
 addTask u = do simpleDB (tasktable . postgres . cfg)
-                        (\ table -> toQuery $ "insert into " <> table <> " (uuid, id, name, desc, status, assignee) values (?,?,?,?,?,?)" )
+                        (\ table -> toQuery $ "insert into " <> table <> " (uuid, id, name, description, open, assignee) values (?,?,?,?,?,?)" )
                         (\ q c -> execute c q u)
 
-addUser :: (MonadIO m, MonadReader RuntimeConfig m) => String -> m Int64
+addUser :: (MonadIO m, MonadReader RuntimeConfig m) => User -> m Int64
 addUser u = do rt <- ask
                let table = schematable rt (usertable . postgres . cfg)
-               let q = toQuery $ "insert into " <> table <> " (uuid, fullname) values (?, '')"
-               liftIO $ execute (dbConnection rt) q (Only u)
+               let q = toQuery $ "insert into " <> table <> " (uuid, roles, fullname) values (?, ?, ?)"
+               liftIO $ execute (dbConnection rt) q u
 
 closeTask :: DBConstraints m RuntimeConfig => UUID -> m Int64
 closeTask u = do simpleDB (tasktable . postgres . cfg)
@@ -33,7 +33,7 @@ closeTask u = do simpleDB (tasktable . postgres . cfg)
 
 checkUserExistsTask :: DBConstraints m RuntimeConfig => UUID -> m [Only Bool]
 checkUserExistsTask u = do simpleDB (usertable . postgres . cfg)
-                                    (\ table -> toQuery $ "select exists(select uuid from " <> table <> " where uuid = (?))" )
+                                    (\ table -> toQuery $ "select exists(select uuid from " <> table <> " where uuid = (?) and ('Worker' = ANY (roles)))" )
                                     (\ q c -> query c q (Only u))
 
 shuffleView :: DBConstraints m RuntimeConfig => String -> m String
