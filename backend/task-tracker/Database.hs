@@ -17,7 +17,7 @@ import           Data.Functor (($>))
 
 addTask :: DBConstraints m RuntimeConfig => Task -> m Int64
 addTask u = do simpleDB (tasktable . postgres . cfg)
-                        (\ table -> toQuery $ "insert into " <> table <> " (uuid, id, name, description, open, assignee) values (?,?,?,?,?,?)" )
+                        (\ table -> toQuery $ "insert into " <> table <> " (uuid, title, jira_id, description, open, assignee) values (?,?,?,?,?,?)" )
                         (\ q c -> execute c q u)
 
 addUser :: (MonadIO m, MonadReader RuntimeConfig m) => User -> m Int64
@@ -44,19 +44,19 @@ shuffleView postfix = do
     let q = toQuery $ "  DO $$ \n\
                        \ DECLARE users_num integer; \n\
                        \ BEGIN \n\
-                       \ users_num := (select count(*) from asyncarch.ttusers); \n\
+                       \ users_num := (select count(*) from asyncarch.ttusers where ('Worker' = ANY (roles))); \n\
                        \ create table " <> ttable <> "_" <> postfix <> " as ( \n\
-                       \ with randusers as (SELECT row_number() over () as idt, uuid as newas FROM " <> utable <> " ORDER BY RANDOM()),\
-                       \ ordtasks as (SELECT floor(random()*users_num)+1 as idu, uuid, id, name, description, open, assignee FROM " <> ttable <>")\
-                       \ select uuid, id, name, description, open, newas as assignee FROM ordtasks\
+                       \ with randusers as (SELECT row_number() over () as idt, uuid as newas FROM " <> utable <> " where ('Worker' = ANY (roles)) ORDER BY RANDOM()),\
+                       \ ordtasks as (SELECT floor(random()*users_num)+1 as idu, uuid, title, jira_id, description, open, assignee FROM " <> ttable <>")\
+                       \ select uuid, title, jira_id, description, open, newas as assignee FROM ordtasks\
                        \ left join randusers\ 
                        \ on randusers.idt = ordtasks.idu\ 
                        \ where ordtasks.open = true); \n\
                        \ truncate table " <> ttable <> "; \n\
-                       \ insert into " <> ttable <> " select uuid, id, name, description, open, assignee from " <> ttable <> "_" <> postfix <> "; \n\
+                       \ insert into " <> ttable <> " select uuid, title, jira_id, description, open, assignee from " <> ttable <> "_" <> postfix <> "; \n\
                        \ commit; \n\
                        \ END $$;"
-    liftIO $ execute (dbConnection rt) q () $> ttable
+    liftIO $ execute (dbConnection rt) q () $> ttable <> "_" <> postfix
 
 fetchTasks :: DBConstraints m RuntimeConfig => UUID -> m [Task]
 fetchTasks u = do simpleDB (tasktable . postgres . cfg)
@@ -73,3 +73,14 @@ dropTempTable :: DBConstraints m RuntimeConfig => String -> m Int64
 dropTempTable tbl = do rt <- ask
                        let q = toQuery $ "drop table " <> tbl <> ";"
                        liftIO $ execute (dbConnection rt) q ()
+
+fetchNumTasks :: DBConstraints m RuntimeConfig => Int -> String -> m [Task]
+fetchNumTasks batchNum table = do
+    num <- asks (pagination . postgres . cfg)
+    let from = show $ batchNum * num
+    let to = show $ batchNum * num + num 
+    simpleDB (tasktable . postgres . cfg)
+             (\_ -> toQuery $ "select uuid, title, jira_id, description, open, assignee from \
+                                    \ (select row_number() over () as rnm, uuid, title, jira_id, description, open, assignee from " <> 
+                                        table <> " ) as t  where t.rnm >= " <> from <> " and t.rnm < " <> to <> " ;" )
+             (\ q c -> query c q ())                       
