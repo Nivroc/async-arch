@@ -27,10 +27,11 @@ instance DefaultConfig UserEventHub where
 
 data TaskEventHub = TaskEventHub { taskexchange :: String, 
                                    crtqueue :: String, crtkey :: String,
-                                   cltqueue :: String, cltkey :: String } deriving (Show, Generic)
+                                   cltqueue :: String, cltkey :: String,
+                                   updqueue :: String, updkey :: String } deriving (Show, Generic)
 instance FromConfig TaskEventHub
 instance DefaultConfig TaskEventHub where
-  configDef = TaskEventHub "" "" "" "" ""                                    
+  configDef = TaskEventHub "" "" "" "" "" "" ""                                   
 
 
 setupRabbit :: MonadResource m => String -> m ()
@@ -55,6 +56,7 @@ setupRabbit cfgPath = do
         --tasks
         createQEXBind (crtqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (crtkey . taskhub $ rabbitCfg) 
         createQBind (cltqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (cltkey . taskhub $ rabbitCfg)
+        createQBind (updqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (updkey . taskhub $ rabbitCfg)
       )
 
 getConnection :: MonadResource m => String -> m Connection
