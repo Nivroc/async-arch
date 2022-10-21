@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main where
 
@@ -29,6 +30,7 @@ import           Control.Monad.IO.Unlift
 import           Control.Exception.Lifted
 import           Control.Concurrent.QSem.Lifted
 import           Control.Monad.Trans.Control
+import           Control.Monad.Trans.State.Strict (StateT (StateT), execStateT)
 import           Database
 import           Model hiding (uuid)
 import           Common
@@ -37,6 +39,7 @@ import           Auth
 import           Control.Arrow ((&&&))
 import           Data.Aeson (decode, encode)
 import           Lens.Micro ((?~))
+
 
 
 main :: IO ()
@@ -72,7 +75,7 @@ routes sem = do
             midware
             defaultHandler $ \str -> status status500 *> json str
 
-            let login = uncurry verifyAgainstAuthService =<< asks ((authid &&& authsecret) . cfg)                                
+            let login = uncurry verifyAgainstAuthService =<< asks ((authid &&& authsecret) . cfg)
 
             get "/assigned/:userid" $ do tok <- login
                                          hasRights <- hasRole tok Worker
@@ -89,7 +92,7 @@ routes sem = do
             put "/close/:taskid" $ do _ <- login
                                       tid <- maybe (actionErr "task id sent is not uuid" status500) pure . fromText =<< param "taskid"
                                       rowsAff <- closeTask tid
-                                      if rowsAff == 0 then text "No such task exists" 
+                                      if rowsAff == 0 then text "No such task exists"
                                       else sendTaskMessage crtkey tid *> text "Success" -- <* эвент
 
             post "/create" $ do _ <- login
@@ -99,14 +102,22 @@ routes sem = do
                                 if userPresent then do
                                   let enrichedTask = (uuidTask ?~ newUUID) task { open = True }
                                   addTask enrichedTask
-                                  sendTaskMessage crtkey enrichedTask 
+                                  sendTaskMessage crtkey enrichedTask
                                   text "Success"
                                 else actionErr "Assignee not found" status500
 
-sendTaskMessage :: (ToJSON a, MonadReader RuntimeConfig m, MonadIO m) => (TaskEventHub -> String) -> a -> ActionT TL.Text m ()
+sendTaskMessage :: (ToJSON a, MonadReader RuntimeConfig m, MonadIO m) => (TaskEventHub -> String) -> a -> m ()
 sendTaskMessage k task = do (exc, routingKey) <- asks ((T.pack . taskexchange &&& T.pack . k) . taskhub . cfg)
                             chan <- asks pubChan
-                            void $ liftIO $ publishMsg chan exc routingKey (newMsg {msgBody = encode task})                              
+                            void $ liftIO $ publishMsg chan exc routingKey (newMsg {msgBody = encode task})
 
-sendUpdates :: MonadIO m => String -> Int64 -> m ()
-sendUpdates table rows = liftIO $ print $ "sending updates for all in table " <> table <> " with " <> show rows <> " rows"
+sendUpdates :: (DBConstraints m RuntimeConfig) => String -> Int64 -> m ()
+sendUpdates table amountToSend = do
+  liftIO $ print $ "sending updates for all in table " <> table <> " with " <> show amountToSend <> " rows"
+  pag <- asks (pagination . postgres . cfg)
+  let batches = (fromIntegral amountToSend :: Int) `quot` pag
+  let getAndSendBatch = StateT (\i -> (, i+1) <$> ((sendTaskMessage updkey `traverse`) =<< fetchNumTasks i table))
+  void $ execStateT (replicateM batches getAndSendBatch) 1
+
+
+

@@ -1,20 +1,30 @@
 CREATE TABLE asyncarch.ttusers (
-    uuid        varchar(50) PRIMARY KEY, 
+    uuid        UUID PRIMARY KEY, 
     roles       varchar(10)[],
     fullname    varchar(25), 
 
     CONSTRAINT t UNIQUE (uuid)
 );
 
-CREATE TABLE asyncarch.tasks (
-    uuid        varchar(50) PRIMARY KEY, 
-    id          varchar(20),
-    name        varchar(50), 
+CREATE TABLE asyncarch.tasksv2 (
+    uuid        UUID PRIMARY KEY, 
+    title       varchar(20),
+    jira_id     varchar(50), 
     description varchar(3000),
     open        boolean,
-    assignee    varchar(50),
+    assignee    UUID,
+
+    CONSTRAINT tt2 UNIQUE (uuid),
+    CONSTRAINT tt4 UNIQUE (jira_id)
+);
+
+CREATE TABLE asyncarch.tasksv1 (
+    uuid        UUID PRIMARY KEY, 
+    jira_id     varchar(50), 
+    description varchar(3000),
+    open        boolean,
+    assignee    UUID,
 
     CONSTRAINT t2 UNIQUE (uuid),
-    CONSTRAINT t3 UNIQUE (id),
-    CONSTRAINT t4 UNIQUE (name)
+    CONSTRAINT t4 UNIQUE (jira_id)
 );

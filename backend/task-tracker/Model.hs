@@ -43,7 +43,7 @@ data User = User { uuid :: UUID, roles :: [Role], fullname :: Maybe String } der
 uuidUser :: Lens' User UUID
 uuidUser = lens (uuid :: User -> UUID) (\usr newuuid -> usr { uuid = newuuid } :: User)
 
-data Task = Task { uuid :: Maybe UUID, id :: String, name :: String, description :: String, open :: Bool, assignee :: UUID } 
+data Task = Task { uuid :: Maybe UUID, title :: String, jira_id :: String, description :: String, open :: Bool, assignee :: UUID } 
   deriving (Show, Generic, FromJSON, ToRow, FromRow, ToJSON) 
 
 uuidTask :: Lens' Task (Maybe UUID)
