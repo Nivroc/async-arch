@@ -73,3 +73,15 @@ changeAssignee t = do rt <- ask
                       let q = toQuery $ "update " <> table <> " set assignee = (?) where uuid = (?) "
                       void $ liftIO $ execute (dbConnection rt) q (assignee t, t ^. uuidTask)
                       return t     
+
+workerAuditLog :: (MonadIO m, MonadReader RuntimeConfig m) => UUID -> m [AuditLogEntry]
+workerAuditLog u = do rt <- ask
+                      let table = schematable rt (audit . postgres . cfg)
+                      let q = toQuery $ "select uuid, title, jira_id, userid, description, amount, ts from " <> table <> " where userid = (?) order by ts desc"
+                      liftIO $ query (dbConnection rt) q (Only u)
+
+allAuditLog :: (MonadIO m, MonadReader RuntimeConfig m) => m [AuditLogEntry]
+allAuditLog = do rt <- ask
+                 let table = schematable rt (audit . postgres . cfg)
+                 let q = toQuery $ "select uuid, title, jira_id, userid, description, amount, ts from " <> table <> " order by ts desc"
+                 liftIO $ query (dbConnection rt) q ()

@@ -22,7 +22,7 @@ CREATE TABLE asyncarch.taskcost (
 
 
 CREATE OR REPLACE VIEW asyncarch.auditlog as (
-    SELECT * from asyncarch.credit
+    SELECT uuid, title, jira_id, userid, description, -amount, ts from asyncarch.credit
     union all
     SELECT * from asyncarch.debit
     order by ts desc

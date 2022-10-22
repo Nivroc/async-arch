@@ -29,7 +29,7 @@ import           Database.PostgreSQL.Simple.Types (Only(..))
 import           Control.Monad.IO.Unlift
 import           Control.Exception.Lifted
 import           Control.Concurrent.QSem.Lifted
-import           Control.Monad.Trans.Control
+import Control.Monad.Trans.Control ( MonadBaseControl )
 import           Control.Monad.Trans.State.Strict (StateT (StateT), execStateT)
 import           Database
 import           Model hiding (uuid)

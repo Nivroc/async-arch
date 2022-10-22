@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TupleSections #-}
 
 module Main where
 
@@ -11,19 +10,21 @@ import           Data.Text.Encoding                                          as 
 import           Data.Text                                                   as T ( pack )
 import qualified Data.Text.Lazy                                              as TL
 import           Data.Aeson (decode, FromJSON)
+import           Data.UUID (fromText, UUID)
+import           Data.Time (UTCTime(..), getCurrentTime)
 
 import           Conferer.Config.Internal ( emptyConfig, addSource )
 import           Conferer ( fetch )
 import qualified Conferer.Source.PropertiesFile                              as PF
 import           Control.Monad.Trans.Resource
 import           Control.Monad.Reader
-import           Control.Applicative (Applicative(..))
+import           Control.Applicative (Applicative(..), (<|>))
 import           Control.Monad.IO.Unlift
 import           Control.Monad.Trans.Control
 import           Control.Arrow ((&&&), Arrow (arr))
 import           Control.Category ((<<<))
 import           Web.Scotty.Trans
-import           Network.HTTP.Types(status500)
+import           Network.HTTP.Types(status500, status401)
 import           Network.AMQP
 import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, withTransaction )
 import           Model
@@ -31,9 +32,10 @@ import           Common
 import           Database
 import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..))
 import           Control.Exception (catches, Handler (..), throwIO, SomeException)
-
-
-
+import           Auth (verifyAgainstAuthService, hasRole, actionErr)
+import GHC.Generics
+import Model (Task(assignee), AuditLogEntry (_userid))
+import Data.List (groupBy)
 
 main :: IO ()
 main = do config <- addSource (PF.fromFilePath "./configs/accounting.properties") emptyConfig
@@ -52,22 +54,63 @@ program = do config <- ask
              runReaderT setupConsumers runtime
              scottyT (port config) (`runReaderT` runtime) Main.routes
 
+data TimeRange = TimeRange {from_time :: UTCTime, to_time :: UTCTime} deriving (Show, Generic, FromJSON)
+
 routes :: (MonadBaseControl IO m, MonadReader RuntimeConfig m, MonadIO m) => ScottyT TL.Text m ()
 routes = do
     midware
     defaultHandler $ \str -> status status500 *> json str
 
-            --TODO: отсылаем эвент
-    get "/log/:user" undefined -- аудит лог отдельного юзера
+    let login = uncurry verifyAgainstAuthService =<< asks ((authid &&& authsecret) . cfg)
 
-    put "/balance/:user" undefined -- сколько денег у юзера
+    get "/account/:user" $ do tok <- login
+                              hasRights <- hasRole tok Worker
+                              uid <- justOrLift status500 "UUID parse error" $ fromText <$> param "user"
+                              if hasRights
+                              then do time <- liftIO getCurrentTime
+                                      let midnightToday = time { utctDayTime = 0 }
+                                      auditLog <- filter (( midnightToday > ) . _ts) <$> workerAuditLog uid
+                                      json $ WorkerAccount (sum $ _amount <$> auditLog) auditLog
+                              else actionErr "Your beak is not dull enough to do that" status401
 
-    get "/total-earned/simple" undefined -- показываем заработанное всего за последний день
+    get "/total-earned/simple" $ do tok <- login
+                                    hasRights <- hasRole tok Admin <|> hasRole tok Manager
+                                    if hasRights
+                                    then do time <- liftIO getCurrentTime
+                                            let midnightToday = time { utctDayTime = 0 }
+                                            auditLog <- filter (( midnightToday > ) . _ts) <$> allAuditLog
+                                            text . TL.pack . show $ sum (_amount <$> auditLog)
+                                    else actionErr "Your beak is not pointy enough to do that" status401
 
-    post "/total-earned/" undefined -- если успею то за выбранный временной период
+    -- заработанное за любой промежуток. на фронте можно вбить любой рейнж дат. хоть за дни хоть за секунды
+    post "/total-earned/" $ do tok <- login
+                               hasRights <- hasRole tok Admin <|> hasRole tok Manager
+                               timeRange :: TimeRange <- jsonData
+                               if hasRights
+                               then do auditLog <- filter (liftA2 (&&) (> from_time timeRange) (< to_time timeRange) . _ts) <$> allAuditLog
+                                       text . TL.pack . show $ sum (_amount <$> auditLog)
+                               else actionErr "Your beak is not pointy enough to do that" status401
 
-    put "/close-day/" undefined -- вообще по времени, этот метод нужен для тестирования
+    -- предполагается что дергаем по крону раз в день в 23:59:59
+    -- (так удобнее всего в рамках нашей учебной системы, в реальной системе этого метода бы не было и был бы учет времени с синком на какой то Google Time)
+    put "/close-day/" $ do tok <- login
+                           hasRights <- hasRole tok Admin <|> hasRole tok Manager
+                           if hasRights
+                           then do time <- liftIO getCurrentTime
+                                   let midnightToday = time { utctDayTime = 0 }
+                                   let secondToMidnightToday = time { utctDayTime = 86400 }
+                                   auditLogForToday <- filter (liftA2 (&&) (> secondToMidnightToday) (< midnightToday) . _ts) <$> allAuditLog
+                                   let groupedByUser = groupBy ((. _userid) . (==) . _userid) auditLogForToday
+                                   traverse sendEmail =<< (payBalance `traverse` groupedByUser)
+                                   text "Success"
+                                   
+                           else actionErr "Your beak is not pointy enough to do that" status401
 
+payBalance :: Monad m => [AuditLogEntry] -> m (UUID, Int)
+payBalance = undefined
+
+sendEmail :: Monad m => (UUID, Int) -> m ()
+sendEmail = undefined
 
 type MessageReact m a = (a -> m ()) -> (Message, Envelope) -> m ()
 type ConsumerConstraints r m a = (MonadReader r m, MonadResource m, MonadUnliftIO m)
@@ -75,15 +118,15 @@ type ConsumerConstraints r m a = (MonadReader r m, MonadResource m, MonadUnliftI
 enrichTaskWithCosts :: MonadIO m => Task -> m Task
 enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
                            awrd <- randomRIO (20, 40)
-                           return t { cost = Just cst, reward = Just awrd}                        
+                           return t { cost = Just cst, reward = Just awrd}
 
 -- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочкe Клейсли выполняются в рамках одной бд транзакции
 setupConsumers :: (MonadFail m, ConsumerConstraints RuntimeConfig m a) => m ()
-setupConsumers = do createConsumer (crtqueue . taskhub) ((voidPair <<< debitUser &&& checkUserExists . assignee) <=< enrichTaskWithCosts)
+setupConsumers = do createConsumer (crtqueue . taskhub) ((voidPair <<< debitUser &&& checkUserExists . assignee) <=< enrichTaskWithCosts )
                     createConsumer (cltqueue . taskhub) ((voidPair <<< (closeTask <=< creditUser) &&& (checkUserExists . assignee)) <=< getTask )
-                    createConsumer (updqueue . taskhub) (voidPair <<< ((debitUser <=< changeAssignee) &&& (checkUserExists . assignee)))
+                    createConsumer (updqueue . taskhub) ( voidPair <<< ((debitUser <=< changeAssignee) &&& (checkUserExists . assignee)))
                     createConsumer (acqueue . userhub) addUser
-                 where voidPair = arr (void . uncurry (liftA2 (,)))   
+                 where voidPair = arr (void . uncurry (liftA2 (,)))
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
 createConsumer queue callback = do
