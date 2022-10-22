@@ -40,14 +40,14 @@ closeTask :: (MonadIO m, MonadReader RuntimeConfig m) => UUID -> m ()
 closeTask t = do rt <- ask
                  let table = schematable rt (taskcost . postgres . cfg)
                  let q = toQuery $ "update " <> table <> " set open = False where uuid = (?)"
-                 void $ liftIO $ execute (dbConnection rt) q (Only t)      
+                 void $ liftIO $ execute (dbConnection rt) q (Only t)
 
-getTask :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => UUID -> m Task 
+getTask :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => UUID -> m Task
 getTask tid = do rt <- ask
                  let table = schematable rt (taskcost . postgres . cfg)
                  let q = toQuery $ "select uuid, title, jira_id, cost, reward, description, open, assignee from " <> table <> " where uuid = (?)"
-                 [task] <- liftIO $ query (dbConnection rt) q (Only tid) 
-                 return task                           
+                 [task] <- liftIO $ query (dbConnection rt) q (Only tid)
+                 return task
 
 creditUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m UUID
 creditUser t = do rt <- ask
@@ -67,12 +67,23 @@ debitUser t = do rt <- ask
                  liftIO $ execute (dbConnection rt) q (newUUID, title t, jira_id t, assignee t, description t, reward t, ts)
                  return t
 
+addEntry :: (MonadIO m, MonadReader RuntimeConfig m) => (PostgresSettings -> String) -> String -> UUID -> Int -> m (UUID, Int)
+addEntry tbl d u amount = do rt <- ask
+                             let table = schematable rt (tbl . postgres . cfg)
+                             newUUID <- liftIO nextRandom
+                             ts <- liftIO getCurrentTime
+                             let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, userid, description, amount, ts) values (?,'" <> d <> "','',?,'',?,?)"
+                             liftIO $ execute (dbConnection rt) q (newUUID, u, amount, ts)
+                             return (u, amount)
+
+-- на случай важных переговоров (\time@(UTCTime (ModifiedJulianDay d) t) -> time {utctDay = ModifiedJulianDay (d + 1), utctDayTime = 1 }) 
+
 changeAssignee :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
 changeAssignee t = do rt <- ask
                       let table = schematable rt (taskcost . postgres . cfg)
                       let q = toQuery $ "update " <> table <> " set assignee = (?) where uuid = (?) "
                       void $ liftIO $ execute (dbConnection rt) q (assignee t, t ^. uuidTask)
-                      return t     
+                      return t
 
 workerAuditLog :: (MonadIO m, MonadReader RuntimeConfig m) => UUID -> m [AuditLogEntry]
 workerAuditLog u = do rt <- ask

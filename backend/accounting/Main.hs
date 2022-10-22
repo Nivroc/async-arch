@@ -5,6 +5,7 @@
 
 module Main where
 
+import           GHC.Generics ( Generic )
 import           System.Random ( randomRIO )
 import           Data.Text.Encoding                                          as T ( encodeUtf8)
 import           Data.Text                                                   as T ( pack )
@@ -33,9 +34,9 @@ import           Database
 import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..))
 import           Control.Exception (catches, Handler (..), throwIO, SomeException)
 import           Auth (verifyAgainstAuthService, hasRole, actionErr)
-import GHC.Generics
-import Model (Task(assignee), AuditLogEntry (_userid))
-import Data.List (groupBy)
+import           Data.List.NonEmpty (groupBy, NonEmpty, head)
+import           Prelude hiding (head)
+
 
 main :: IO ()
 main = do config <- addSource (PF.fromFilePath "./configs/accounting.properties") emptyConfig
@@ -94,7 +95,7 @@ routes = do
     -- предполагается что дергаем по крону раз в день в 23:59:59
     -- (так удобнее всего в рамках нашей учебной системы, в реальной системе этого метода бы не было и был бы учет времени с синком на какой то Google Time)
     put "/close-day/" $ do tok <- login
-                           hasRights <- hasRole tok Admin <|> hasRole tok Manager
+                           hasRights <- hasRole tok Admin <|> hasRole tok Accountant
                            if hasRights
                            then do time <- liftIO getCurrentTime
                                    let midnightToday = time { utctDayTime = 0 }
@@ -102,13 +103,17 @@ routes = do
                                    auditLogForToday <- filter (liftA2 (&&) (> secondToMidnightToday) (< midnightToday) . _ts) <$> allAuditLog
                                    let groupedByUser = groupBy ((. _userid) . (==) . _userid) auditLogForToday
                                    traverse sendEmail =<< (payBalance `traverse` groupedByUser)
-                                   text "Success"
-                                   
+                                   text "Success"  
                            else actionErr "Your beak is not pointy enough to do that" status401
 
-payBalance :: Monad m => [AuditLogEntry] -> m (UUID, Int)
-payBalance = undefined
+payBalance :: DBConstraints m RuntimeConfig => NonEmpty AuditLogEntry -> m (UUID, Int)
+payBalance auditLog = 
+    let totalEarned = sum (_amount <$> auditLog) in
+    if totalEarned > 0 then addEntry debit "[PAYCHECK]" (_userid $ head auditLog) totalEarned 
+    else if totalEarned == 0 then pure (_userid $ head auditLog, 0)
+    else addEntry credit "[DEBT]" (_userid $ head auditLog) (-totalEarned)     
 
+-- TODO: в последнюю очередь
 sendEmail :: Monad m => (UUID, Int) -> m ()
 sendEmail = undefined
 
