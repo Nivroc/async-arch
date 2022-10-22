@@ -15,6 +15,13 @@ import Control.Monad.Trans ( MonadIO, liftIO )
 import Data.UUID.V4 (nextRandom)
 import Data.Time (getCurrentTime)
 import Data.UUID (UUID)
+import Lens.Micro ((^.))
+
+addUser :: (MonadIO m, MonadReader RuntimeConfig m) => User -> m ()
+addUser u = do rt <- ask
+               let table = schematable rt (acusers . postgres . cfg)
+               let q = toQuery $ "insert into " <> table <> " (uuid, roles, fullname, email) values (?, ?, ?, ?)"
+               void $ liftIO $ execute (dbConnection rt) q u
 
 addTask :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m ()
 addTask t = do rt <- ask
@@ -42,7 +49,7 @@ creditUser t = do rt <- ask
                   ts <- liftIO getCurrentTime
                   let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, userid, description, amount, ts) values (?,?,?,?,?,?,?)"
                   liftIO $ execute (dbConnection rt) q (newUUID, title t, jira_id t, assignee t, description t, cost t, ts)
-                  return $ uuid t
+                  return $ t ^. uuidTask
 
 debitUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
 debitUser t = do rt <- ask
@@ -57,5 +64,5 @@ changeAssignee :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
 changeAssignee t = do rt <- ask
                       let table = schematable rt (taskcost . postgres . cfg)
                       let q = toQuery $ "update " <> table <> " set assignee = (?) where uuid = (?) "
-                      void $ liftIO $ execute (dbConnection rt) q (assignee t, uuid t)
+                      void $ liftIO $ execute (dbConnection rt) q (assignee t, t ^. uuidTask)
                       return t     

@@ -26,9 +26,8 @@ import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, withTran
 import           Model
 import           Common
 import           Database
-import           Rabbit (setupRabbit, getConnection, TaskEventHub (..))
+import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..))
 import           Control.Exception (catches, Handler (..), throwIO, SomeException)
-
 
 
 main :: IO ()
@@ -73,11 +72,12 @@ enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
                            awrd <- randomRIO (20, 40)
                            return t { cost = Just cst, reward = Just awrd}
 
--- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочки Клейсли выполняются в рамках одной бд транзакции
+-- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочкe Клейсли выполняются в рамках одной бд транзакции
 setupConsumers :: (MonadFail m, ConsumerConstraints RuntimeConfig m a) => m ()
 setupConsumers = do createConsumer (crtqueue . taskhub) (addTask <=< debitUser <=< enrichTaskWithCosts)
                     createConsumer (cltqueue . taskhub) (closeTask <=< creditUser <=< getTask )
                     createConsumer (updqueue . taskhub) (void . debitUser <=< changeAssignee)
+                    createConsumer (acqueue . userhub) addUser
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
 createConsumer queue callback = do

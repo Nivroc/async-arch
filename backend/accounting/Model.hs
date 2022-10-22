@@ -1,6 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
-module Model(RuntimeConfig(..), PostgresSettings(..), ApplicationConfig(..), Task(..)) where
+module Model(RuntimeConfig(..), PostgresSettings(..), ApplicationConfig(..), Task(..), User(..), uuidTask, uuidUser) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.UUID
@@ -12,6 +13,8 @@ import Common
 import Control.Arrow ((&&&))
 import qualified Network.AMQP as AMQP
 import Rabbit
+import Lens.Micro (Lens', lens)
+
 
 data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, pubChan :: AMQP.Channel, consumeConn :: AMQP.Connection } deriving Generic
 instance DBConnect RuntimeConfig where
@@ -19,11 +22,11 @@ instance DBConnect RuntimeConfig where
   schematable rt tbl = uncurry ((<>) . (<> ".")) . (schema . postgres . cfg &&& tbl) $ rt
   connection = dbConnection
 
-data PostgresSettings = PSettings { dbstring :: String, schema :: String, debit :: String, credit :: String, taskcost :: String } deriving (Show, Generic)
+data PostgresSettings = PSettings { dbstring :: String, schema :: String, debit :: String, credit :: String, taskcost :: String, acusers :: String } deriving (Show, Generic)
 instance FromConfig PostgresSettings
 instance DefaultConfig PostgresSettings where
   configDef :: PostgresSettings
-  configDef = PSettings "" "asyncarch" "users" "" ""
+  configDef = PSettings "" "asyncarch" "users" "" "" ""
 data ApplicationConfig = AppCfg { port :: Int, 
                                   postgres :: PostgresSettings,
                                   authid :: String,
@@ -46,3 +49,11 @@ data Task = Task { uuid :: UUID,
                    open :: Bool, 
                    assignee :: UUID } 
   deriving (Show, Generic, FromJSON, ToRow, FromRow, ToJSON) 
+
+uuidTask :: Lens' Task UUID
+uuidTask = lens (uuid :: Task -> UUID) (\tsk newuuid -> tsk { uuid = newuuid } :: Task)
+
+data User = User { uuid :: UUID, roles :: [Role], fullname :: Maybe String, email :: String } deriving (Show, Generic, FromJSON, ToRow, FromRow) 
+
+uuidUser :: Lens' User UUID
+uuidUser = lens (uuid :: User -> UUID) (\usr newuuid -> usr { uuid = newuuid } :: User)
