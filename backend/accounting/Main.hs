@@ -27,6 +27,8 @@ import           Model
 import           Common
 import           Database
 import           Rabbit (setupRabbit, getConnection, TaskEventHub (..))
+import Control.Exception (catches, Handler (..), throwIO, SomeException)
+
 
 
 main :: IO ()
@@ -85,13 +87,14 @@ createConsumer queue callback = do
     void $ liftIO $ consumeMsgs consumeChan (T.pack . queue . cfg $ runtime) Ack (run . decodeAndAck callback)
 
 decodeAndAck :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => MessageReact m a
-decodeAndAck action (msg, env)  = do
+decodeAndAck action (msg, env) = do
     unl <- askRunInIO
     liftIO $ do let dcd = decode $ msgBody msg
                 putStrLn $ "received message: " <> show dcd
                 (unl . action) =<< maybe (nackEnv env *> fail "decoding problem") pure dcd
                 ackEnv env
-
+        `catches` [ Handler $ \(e :: ChanThreadKilledException) -> nackEnv env *> throwIO e,
+                    Handler $ \(e :: SomeException) -> nackEnv env *> putStrLn ("Unrecognized Exception" <> show e)]
 
 
 
