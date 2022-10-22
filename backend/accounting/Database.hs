@@ -23,6 +23,13 @@ addUser u = do rt <- ask
                let q = toQuery $ "insert into " <> table <> " (uuid, roles, fullname, email) values (?, ?, ?, ?)"
                void $ liftIO $ execute (dbConnection rt) q u
 
+checkUserExists :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => UUID -> m UUID
+checkUserExists u = do rt <- ask
+                       let table = schematable rt (acusers . postgres . cfg)
+                       let q = toQuery $ "select exists(select uuid from " <> table <> " where uuid = (?) and ('Worker' = ANY (roles)))"
+                       [Only True] <- liftIO $ query (dbConnection rt) q (Only u)
+                       return u
+
 addTask :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m ()
 addTask t = do rt <- ask
                let table = schematable rt (taskcost . postgres . cfg)

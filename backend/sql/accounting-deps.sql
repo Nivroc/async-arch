@@ -2,7 +2,7 @@ CREATE TABLE asyncarch.acusers (
     uuid        UUID PRIMARY KEY, 
     roles       varchar(10)[],
     fullname    varchar(25), 
-    email       varchar(50)
+    email       varchar(50),
 
     CONSTRAINT a0 UNIQUE (uuid)
 );

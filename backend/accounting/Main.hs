@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main where
 
@@ -19,6 +20,8 @@ import           Control.Monad.Reader
 import           Control.Applicative (Applicative(..))
 import           Control.Monad.IO.Unlift
 import           Control.Monad.Trans.Control
+import           Control.Arrow ((&&&), Arrow (arr))
+import           Control.Category ((<<<))
 import           Web.Scotty.Trans
 import           Network.HTTP.Types(status500)
 import           Network.AMQP
@@ -28,6 +31,8 @@ import           Common
 import           Database
 import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..))
 import           Control.Exception (catches, Handler (..), throwIO, SomeException)
+
+
 
 
 main :: IO ()
@@ -70,14 +75,15 @@ type ConsumerConstraints r m a = (MonadReader r m, MonadResource m, MonadUnliftI
 enrichTaskWithCosts :: MonadIO m => Task -> m Task
 enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
                            awrd <- randomRIO (20, 40)
-                           return t { cost = Just cst, reward = Just awrd}
+                           return t { cost = Just cst, reward = Just awrd}                        
 
 -- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочкe Клейсли выполняются в рамках одной бд транзакции
 setupConsumers :: (MonadFail m, ConsumerConstraints RuntimeConfig m a) => m ()
-setupConsumers = do createConsumer (crtqueue . taskhub) (addTask <=< debitUser <=< enrichTaskWithCosts)
-                    createConsumer (cltqueue . taskhub) (closeTask <=< creditUser <=< getTask )
-                    createConsumer (updqueue . taskhub) (void . debitUser <=< changeAssignee)
+setupConsumers = do createConsumer (crtqueue . taskhub) ((voidPair <<< debitUser &&& checkUserExists . assignee) <=< enrichTaskWithCosts)
+                    createConsumer (cltqueue . taskhub) ((voidPair <<< (closeTask <=< creditUser) &&& (checkUserExists . assignee)) <=< getTask )
+                    createConsumer (updqueue . taskhub) (voidPair <<< ((debitUser <=< changeAssignee) &&& (checkUserExists . assignee)))
                     createConsumer (acqueue . userhub) addUser
+                 where voidPair = arr (void . uncurry (liftA2 (,)))   
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
 createConsumer queue callback = do
