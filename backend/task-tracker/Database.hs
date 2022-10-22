@@ -28,7 +28,7 @@ addUser u = do rt <- ask
 
 closeTask :: DBConstraints m RuntimeConfig => UUID -> m Int64
 closeTask u = do simpleDB (tasktable . postgres . cfg)
-                          (\ table -> toQuery $ "update " <> table <> " set status = False where uuid = (?)" )
+                          (\ table -> toQuery $ "update " <> table <> " set open = False where uuid = (?)" )
                           (\ q c -> execute c q (Only u))
 
 checkUserExistsTask :: DBConstraints m RuntimeConfig => UUID -> m [Only Bool]

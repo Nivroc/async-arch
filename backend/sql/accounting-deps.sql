@@ -1,23 +1,24 @@
 CREATE TABLE asyncarch.taskcost (
-    taskpid       varchar(50) PRIMARY KEY, 
-    id            varchar(20),
+    uuid          UUID PRIMARY KEY, 
+    title         varchar(20),
+    jira_id       varchar(50), 
     cost          int, 
+    reward        int,
     description   varchar(3000),
     open          boolean,
-    assignee      varchar(50),
+    assignee      UUID,
 
     CONSTRAINT a UNIQUE (uuid)
 );
 
 CREATE TABLE asyncarch.credit (
-    pid             varchar(50) PRIMARY KEY, 
-    id              varchar(20),
-    userid          varchar(50), 
+    uuid            UUID PRIMARY KEY, 
+    title           varchar(20),
+    jira_id         varchar(50), 
+    userid          UUID, 
     description     varchar(3000),
     amount          int,
     ts              timestamp,
-    period          int,
-    open            boolean,
 
     CONSTRAINT a1 UNIQUE (pid),
     CONSTRAINT a2 UNIQUE (id),
@@ -25,14 +26,13 @@ CREATE TABLE asyncarch.credit (
 );
 
 CREATE TABLE asyncarch.debit (
-    pid             varchar(50) PRIMARY KEY, 
-    id              varchar(20),
-    userid          varchar(50), 
+    uuid            UUID PRIMARY KEY, 
+    title           varchar(20),
+    jira_id         varchar(50), 
+    userid          UUID, 
     description     varchar(3000),
     amount          int,
     ts              timestamp,
-    period          int,
-    open            boolean,
 
     CONSTRAINT a4 UNIQUE (uuid),
     CONSTRAINT a5 UNIQUE (userid),

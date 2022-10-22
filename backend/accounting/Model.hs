@@ -1,6 +1,6 @@
 {-# LANGUAGE InstanceSigs #-}
 
-module Model(RuntimeConfig(..), PostgresSettings(..), ApplicationConfig(..), User(..), Task(..)) where
+module Model(RuntimeConfig(..), PostgresSettings(..), ApplicationConfig(..), Task(..)) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.UUID
@@ -13,30 +13,36 @@ import Control.Arrow ((&&&))
 import qualified Network.AMQP as AMQP
 import Rabbit
 
-data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, pubChan :: AMQP.Connection, consChan :: AMQP.Connection } deriving Generic
+data RuntimeConfig = RtConfig { cfg :: ApplicationConfig, dbConnection :: Connection, pubChan :: AMQP.Channel, consumeConn :: AMQP.Connection } deriving Generic
 instance DBConnect RuntimeConfig where
+  schematable :: RuntimeConfig -> (RuntimeConfig -> String) -> String
   schematable rt tbl = uncurry ((<>) . (<> ".")) . (schema . postgres . cfg &&& tbl) $ rt
   connection = dbConnection
 
-data PostgresSettings = PSettings { dbstring :: String, schema :: String, usertable :: String, tasktable :: String, pagination :: Int } deriving (Show, Generic)
+data PostgresSettings = PSettings { dbstring :: String, schema :: String, debit :: String, credit :: String, taskcost :: String } deriving (Show, Generic)
 instance FromConfig PostgresSettings
 instance DefaultConfig PostgresSettings where
   configDef :: PostgresSettings
-  configDef = PSettings "" "asyncarch" "users" "" 1
+  configDef = PSettings "" "asyncarch" "users" "" ""
 data ApplicationConfig = AppCfg { port :: Int, 
                                   postgres :: PostgresSettings,
                                   authid :: String,
                                   authsecret :: String,
-                                  userhub :: UserEventHub
+                                  userhub :: UserEventHub,
+                                  taskhub :: TaskEventHub
                                 } deriving (Show, Generic)
                                                              
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 configDef "" "" configDef          
+  configDef = AppCfg 8080 configDef "" "" configDef configDef  
 
-data User = User { usruuid :: UUID, fullname :: Maybe String } deriving (Show, Generic, FromJSON, ToRow, FromRow) 
-
-data Task = Task { taskuuid :: Maybe UUID, id :: String, name :: String, desc :: String, open :: Bool, assignee :: UUID } 
+data Task = Task { uuid :: UUID, 
+                   title :: String, 
+                   jira_id :: String, 
+                   description :: String, 
+                   open :: Bool, 
+                   assignee :: UUID, 
+                   cost :: Maybe Int, 
+                   reward :: Maybe Int } 
   deriving (Show, Generic, FromJSON, ToRow, FromRow, ToJSON) 
-

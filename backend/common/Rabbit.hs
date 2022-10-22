@@ -65,3 +65,4 @@ getConnection cfgPath = do
   rabbitCfg :: RabbitConfig <- liftIO $ fetch config
   (_, conn) <- allocate (openConnection'' (fromURI $ connectionString rabbitCfg)) closeConnection
   return conn 
+  

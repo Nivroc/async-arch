@@ -49,6 +49,7 @@ dependencies:
 - monad-control
 - req
 - http-client
+- random
 
 library:
   source-dirs: common
