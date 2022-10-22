@@ -75,6 +75,7 @@ enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
 setupConsumers :: ConsumerConstraints RuntimeConfig m a => m ()
 setupConsumers = do createConsumer (crtqueue . taskhub) (addTask <=< debitUser <=< enrichTaskWithCosts)
                     createConsumer (cltqueue . taskhub) (closeTask <=< creditUser)
+                    createConsumer (updqueue . taskhub) (void . debitUser <=< changeAssignee)
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
 createConsumer queue callback = do
