@@ -16,27 +16,33 @@ import Data.UUID.V4 (nextRandom)
 import Data.Time (getCurrentTime)
 import Data.UUID (UUID)
 
-
 addTask :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m ()
 addTask t = do rt <- ask
                let table = schematable rt (taskcost . postgres . cfg)
-               let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, description, open, assignee) values (?,?,?,?,?,?)"
+               let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, cost, reward, description, open, assignee) values (?,?,?,?,?,?,?,?)"
                void $ liftIO $ execute (dbConnection rt) q t
 
-closeTask :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m ()
+closeTask :: (MonadIO m, MonadReader RuntimeConfig m) => UUID -> m ()
 closeTask t = do rt <- ask
                  let table = schematable rt (taskcost . postgres . cfg)
                  let q = toQuery $ "update " <> table <> " set open = False where uuid = (?)"
-                 void $ liftIO $ execute (dbConnection rt) q (Only $ uuid t)               
+                 void $ liftIO $ execute (dbConnection rt) q (Only t)      
 
-creditUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
+getTask :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => UUID -> m Task 
+getTask tid = do rt <- ask
+                 let table = schematable rt (taskcost . postgres . cfg)
+                 let q = toQuery $ "select uuid, title, jira_id, cost, reward, description, open, assignee from " <> table <> " where uuid = (?)"
+                 [task] <- liftIO $ query (dbConnection rt) q (Only tid) 
+                 return task                           
+
+creditUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m UUID
 creditUser t = do rt <- ask
                   let table = schematable rt (credit . postgres . cfg)
                   newUUID <- liftIO nextRandom
                   ts <- liftIO getCurrentTime
                   let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, userid, description, amount, ts) values (?,?,?,?,?,?,?)"
                   liftIO $ execute (dbConnection rt) q (newUUID, title t, jira_id t, assignee t, description t, cost t, ts)
-                  return t
+                  return $ uuid t
 
 debitUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
 debitUser t = do rt <- ask

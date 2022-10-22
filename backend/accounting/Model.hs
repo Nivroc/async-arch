@@ -40,9 +40,9 @@ instance DefaultConfig ApplicationConfig where
 data Task = Task { uuid :: UUID, 
                    title :: String, 
                    jira_id :: String, 
+                   cost :: Maybe Int, 
+                   reward :: Maybe Int ,
                    description :: String, 
                    open :: Bool, 
-                   assignee :: UUID, 
-                   cost :: Maybe Int, 
-                   reward :: Maybe Int } 
+                   assignee :: UUID } 
   deriving (Show, Generic, FromJSON, ToRow, FromRow, ToJSON) 

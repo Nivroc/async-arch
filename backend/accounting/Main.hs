@@ -22,12 +22,12 @@ import           Control.Monad.Trans.Control
 import           Web.Scotty.Trans
 import           Network.HTTP.Types(status500)
 import           Network.AMQP
-import           Database.PostgreSQL.Simple ( close, connectPostgreSQL )
+import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, withTransaction )
 import           Model
 import           Common
 import           Database
 import           Rabbit (setupRabbit, getConnection, TaskEventHub (..))
-import Control.Exception (catches, Handler (..), throwIO, SomeException)
+import           Control.Exception (catches, Handler (..), throwIO, SomeException)
 
 
 
@@ -37,7 +37,7 @@ main = do config <- addSource (PF.fromFilePath "./configs/accounting.properties"
           runResourceT (runReaderT program mainApp)
 
 
-program :: (MonadReader ApplicationConfig m, MonadResource m, MonadUnliftIO m) => m ()
+program :: (MonadReader ApplicationConfig m, MonadResource m, MonadUnliftIO m, MonadFail m) => m ()
 program = do config <- ask
              (_, conn) <- allocate (connectPostgreSQL $ T.encodeUtf8 $ T.pack (dbstring $ postgres config)) ((*> Prelude.putStrLn "connection closed") . close)
              let rabbitCfgPath = "./configs/rabbitmq.properties"
@@ -73,11 +73,10 @@ enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
                            awrd <- randomRIO (20, 40)
                            return t { cost = Just cst, reward = Just awrd}
 
--- На каждый по каналу, все каналы в одном коннекшене
--- По хорошему стоит впилить транзакционность между <=< чтобы действие в предыдущих ролбэкалась при последующих
-setupConsumers :: ConsumerConstraints RuntimeConfig m a => m ()
+-- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочки Клейсли выполняются в рамках одной бд транзакции
+setupConsumers :: (MonadFail m, ConsumerConstraints RuntimeConfig m a) => m ()
 setupConsumers = do createConsumer (crtqueue . taskhub) (addTask <=< debitUser <=< enrichTaskWithCosts)
-                    createConsumer (cltqueue . taskhub) (closeTask <=< creditUser)
+                    createConsumer (cltqueue . taskhub) (closeTask <=< creditUser <=< getTask )
                     createConsumer (updqueue . taskhub) (void . debitUser <=< changeAssignee)
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
@@ -90,9 +89,10 @@ createConsumer queue callback = do
 decodeAndAck :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => MessageReact m a
 decodeAndAck action (msg, env) = do
     unl <- askRunInIO
+    conn <- asks dbConnection
     liftIO $ do let dcd = decode $ msgBody msg
                 putStrLn $ "received message: " <> show dcd
-                (unl . action) =<< maybe (nackEnv env *> fail "decoding problem") pure dcd
+                (withTransaction conn . unl . action) =<< maybe (nackEnv env *> fail "decoding problem") pure dcd
                 ackEnv env
         `catches` [ Handler $ \(e :: ChanThreadKilledException) -> nackEnv env *> throwIO e,
                     Handler $ \(e :: SomeException) -> nackEnv env *> putStrLn ("Unrecognized Exception" <> show e)]
