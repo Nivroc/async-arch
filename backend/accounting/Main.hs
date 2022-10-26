@@ -10,7 +10,7 @@ import           System.Random ( randomRIO )
 import           Data.Text.Encoding                                          as T ( encodeUtf8)
 import           Data.Text                                                   as T ( pack )
 import qualified Data.Text.Lazy                                              as TL
-import           Data.Aeson (decode, FromJSON)
+import           Data.Aeson (decode, FromJSON, ToJSON, encode)
 import           Data.UUID (fromText, UUID)
 import           Data.Time (UTCTime(..), getCurrentTime)
 
@@ -22,7 +22,7 @@ import           Control.Monad.Reader
 import           Control.Applicative (Applicative(..), (<|>))
 import           Control.Monad.IO.Unlift
 import           Control.Monad.Trans.Control
-import           Control.Arrow ((&&&), Arrow (arr))
+import           Control.Arrow ((&&&), (***))
 import           Control.Category ((<<<))
 import           Web.Scotty.Trans
 import           Network.HTTP.Types(status500, status401)
@@ -31,11 +31,12 @@ import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, withTran
 import           Model
 import           Common
 import           Database
-import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..))
+import           Rabbit (setupRabbit, getConnection, TaskEventHub (..), UserEventHub (..), PaymentEventHub (..))
 import           Control.Exception (catches, Handler (..), throwIO, SomeException)
 import           Auth (verifyAgainstAuthService, hasRole, actionErr)
 import           Data.List.NonEmpty (groupBy, NonEmpty, head)
 import           Prelude hiding (head)
+import           Data.Bifoldable (bisequenceA_)
 
 
 main :: IO ()
@@ -103,15 +104,15 @@ routes = do
                                    auditLogForToday <- filter (liftA2 (&&) (> secondToMidnightToday) (< midnightToday) . _ts) <$> allAuditLog
                                    let groupedByUser = groupBy ((. _userid) . (==) . _userid) auditLogForToday
                                    traverse sendEmail =<< (payBalance `traverse` groupedByUser)
-                                   text "Success"  
+                                   text "Success"
                            else actionErr "Your beak is not pointy enough to do that" status401
 
 payBalance :: DBConstraints m RuntimeConfig => NonEmpty AuditLogEntry -> m (UUID, Int)
-payBalance auditLog = 
+payBalance auditLog =
     let totalEarned = sum (_amount <$> auditLog) in
-    if totalEarned > 0 then addEntry debit "[PAYCHECK]" (_userid $ head auditLog) totalEarned 
+    if totalEarned > 0 then addEntry debit "[PAYCHECK]" (_userid $ head auditLog) totalEarned
     else if totalEarned == 0 then pure (_userid $ head auditLog, 0)
-    else addEntry credit "[DEBT]" (_userid $ head auditLog) (-totalEarned)     
+    else addEntry credit "[DEBT]" (_userid $ head auditLog) (-totalEarned)
 
 -- TODO: в последнюю очередь
 sendEmail :: Monad m => (UUID, Int) -> m ()
@@ -127,11 +128,12 @@ enrichTaskWithCosts t = do cst <- randomRIO (10, 20)
 
 -- На каждый по каналу, все каналы в одном коннекшене. Все действия в цепочкe Клейсли выполняются в рамках одной бд транзакции
 setupConsumers :: (MonadFail m, ConsumerConstraints RuntimeConfig m a) => m ()
-setupConsumers = do createConsumer (crtqueue . taskhub) ((voidPair <<< debitUser &&& checkUserExists . assignee) <=< enrichTaskWithCosts )
-                    createConsumer (cltqueue . taskhub) ((voidPair <<< (closeTask <=< creditUser) &&& (checkUserExists . assignee)) <=< getTask )
-                    createConsumer (updqueue . taskhub) ( voidPair <<< ((debitUser <=< changeAssignee) &&& (checkUserExists . assignee)))
+setupConsumers = do createConsumer (crtqueue . taskhub) ((bisequenceA_ <<< ((sendTransaction True . fst) <=< creditUser) &&& checkUserExists . assignee) <=< enrichTaskWithCosts )
+                    createConsumer (cltqueue . taskhub) ((bisequenceA_ <<< ((bisequenceA_ <<< sendTransaction False *** closeTask) <=< debitUser) &&& (checkUserExists . assignee)) <=< getTask )
+                    createConsumer (updqueue . taskhub) ( bisequenceA_ <<< (((sendTransaction True . fst) <=< creditUser <=< changeAssignee) &&& (checkUserExists . assignee)))
                     createConsumer (acqueue . userhub) addUser
-                 where voidPair = arr (void . uncurry (liftA2 (,)))
+                 where sendTransaction cred = sendMessage (anakey . paymenthub) (anaqueue . paymenthub) (createAuditMessage cred)
+                       createAuditMessage cred original = AuditLogEntryEvent (_uuid original) (_title original) (_jira_id original) (_userid original) (_amount original) cred cred (_ts original)
 
 createConsumer :: (Show a, FromJSON a, ConsumerConstraints RuntimeConfig m a) => (ApplicationConfig -> String) -> (a -> m ()) -> m ()
 createConsumer queue callback = do
@@ -150,6 +152,14 @@ decodeAndAck action (msg, env) = do
                 ackEnv env
         `catches` [ Handler $ \(e :: ChanThreadKilledException) -> nackEnv env *> throwIO e,
                     Handler $ \(e :: SomeException) -> nackEnv env *> putStrLn ("Unrecognized Exception" <> show e)]
+
+
+sendMessage :: (ToJSON b, MonadReader RuntimeConfig m, MonadIO m) => (ApplicationConfig -> String) -> (ApplicationConfig -> String) -> (a -> b) -> a -> m a
+sendMessage k ex transform mess = do
+        (exc, routingKey) <- asks ((T.pack . ex &&& T.pack . k) . cfg)
+        chan <- asks pubChan
+        liftIO $ publishMsg chan exc routingKey (newMsg {msgBody = encode $ transform mess})
+        return mess
 
 
 

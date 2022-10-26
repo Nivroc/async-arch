@@ -16,6 +16,7 @@ import Data.UUID.V4 (nextRandom)
 import Data.Time (getCurrentTime)
 import Data.UUID (UUID)
 import Lens.Micro ((^.))
+import Data.Maybe (fromMaybe)
 
 addUser :: (MonadIO m, MonadReader RuntimeConfig m) => User -> m ()
 addUser u = do rt <- ask
@@ -36,11 +37,11 @@ addTask t = do rt <- ask
                let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, cost, reward, description, open, assignee) values (?,?,?,?,?,?,?,?)"
                void $ liftIO $ execute (dbConnection rt) q t
 
-closeTask :: (MonadIO m, MonadReader RuntimeConfig m) => UUID -> m ()
+closeTask :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m ()
 closeTask t = do rt <- ask
                  let table = schematable rt (taskcost . postgres . cfg)
                  let q = toQuery $ "update " <> table <> " set open = False where uuid = (?)"
-                 void $ liftIO $ execute (dbConnection rt) q (Only t)
+                 void $ liftIO $ execute (dbConnection rt) q (Only (t ^. uuidTask))
 
 getTask :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => UUID -> m Task
 getTask tid = do rt <- ask
@@ -49,23 +50,23 @@ getTask tid = do rt <- ask
                  [task] <- liftIO $ query (dbConnection rt) q (Only tid)
                  return task
 
-creditUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m UUID
+creditUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m (AuditLogEntry, UUID)
 creditUser t = do rt <- ask
                   let table = schematable rt (credit . postgres . cfg)
                   newUUID <- liftIO nextRandom
                   ts <- liftIO getCurrentTime
                   let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, userid, description, amount, ts) values (?,?,?,?,?,?,?)"
                   liftIO $ execute (dbConnection rt) q (newUUID, title t, jira_id t, assignee t, description t, cost t, ts)
-                  return $ t ^. uuidTask
+                  return (AuditLogEntry newUUID (title t) (jira_id t) (assignee t) (description t) (fromMaybe 0 $ cost t) ts, t ^. uuidTask)
 
-debitUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m Task
+debitUser :: (MonadIO m, MonadReader RuntimeConfig m) => Task -> m (AuditLogEntry, Task)
 debitUser t = do rt <- ask
                  let table = schematable rt (credit . postgres . cfg)
                  newUUID <- liftIO nextRandom
                  ts <- liftIO getCurrentTime
                  let q = toQuery $ "insert into " <> table <> " (uuid, title, jira_id, userid, description, amount, ts) values (?,?,?,?,?,?,?)"
                  liftIO $ execute (dbConnection rt) q (newUUID, title t, jira_id t, assignee t, description t, reward t, ts)
-                 return t
+                 return (AuditLogEntry newUUID (title t) (jira_id t) (assignee t) (description t) (fromMaybe 0 $ cost t) ts, t)
 
 addEntry :: (MonadIO m, MonadReader RuntimeConfig m) => (PostgresSettings -> String) -> String -> UUID -> Int -> m (UUID, Int)
 addEntry tbl d u amount = do rt <- ask

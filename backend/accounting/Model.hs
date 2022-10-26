@@ -1,7 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Model(RuntimeConfig(..), PostgresSettings(..), ApplicationConfig(..), Task(..), User(..), AuditLogEntry(..), WorkerAccount(..), uuidTask, uuidUser) where
+module Model(RuntimeConfig(..), AuditLogEntryEvent(..), PostgresSettings(..), ApplicationConfig(..), Task(..), User(..), AuditLogEntry(..), WorkerAccount(..), uuidTask, uuidUser) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.UUID
@@ -33,13 +33,14 @@ data ApplicationConfig = AppCfg { port :: Int,
                                   authid :: String,
                                   authsecret :: String,
                                   userhub :: UserEventHub,
-                                  taskhub :: TaskEventHub
+                                  taskhub :: TaskEventHub,
+                                  paymenthub :: PaymentEventHub
                                 } deriving (Show, Generic)
                                                              
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 configDef "" "" configDef configDef  
+  configDef = AppCfg 8080 configDef "" "" configDef configDef configDef 
 
 data Task = Task { uuid :: UUID, 
                    title :: String, 
@@ -67,4 +68,14 @@ data AuditLogEntry = AuditLogEntry { _uuid :: UUID,
                                      _amount :: Int, 
                                      _ts :: UTCTime } deriving (Show, Generic, FromJSON, ToRow, FromRow, ToJSON) 
 
-data WorkerAccount = WorkerAccount {balance :: Int, log :: [AuditLogEntry]} deriving (Show, Generic, FromJSON, ToJSON)                                     
+data WorkerAccount = WorkerAccount {balance :: Int, log :: [AuditLogEntry]} deriving (Show, Generic, FromJSON, ToJSON)     
+
+data AuditLogEntryEvent = AuditLogEntryEvent { 
+  e_uuid :: UUID, 
+  e_title :: String, 
+  e_jira_id :: String,
+  e_userid :: UUID, 
+  e_amount :: Int, 
+  e_open :: Bool,
+  e_isCredit :: Bool,
+  e_ts :: UTCTime } deriving (Show, Generic, FromJSON, ToJSON) 

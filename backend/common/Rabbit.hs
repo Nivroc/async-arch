@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Rabbit(RabbitConfig(..), TaskEventHub(..), setupRabbit, UserEventHub (..), getConnection) where
+module Rabbit(RabbitConfig(..), TaskEventHub(..), PaymentEventHub(..), setupRabbit, UserEventHub (..), getConnection) where
 
 import Network.AMQP
 import Control.Monad.Trans
@@ -15,15 +15,20 @@ import Control.Monad.Trans.Resource ( allocate, MonadResource )
 import qualified Data.Text as T
 import Control.Exception (bracket)
 
-data RabbitConfig = RabbitConfig { connectionString :: String, userhub :: UserEventHub, taskhub :: TaskEventHub } deriving (Show, Generic)
+data RabbitConfig = RabbitConfig { connectionString :: String, userhub :: UserEventHub, taskhub :: TaskEventHub, paymenthub :: PaymentEventHub } deriving (Show, Generic)
 instance FromConfig RabbitConfig
 instance DefaultConfig RabbitConfig where
-  configDef = RabbitConfig "" configDef configDef
+  configDef = RabbitConfig "" configDef configDef configDef
 
 data UserEventHub = UserEventHub { ttqueue :: String, acqueue :: String, userexchange :: String, key :: String} deriving (Show, Generic) -- TODO: сделать bindings для понимания что как раутить
 instance FromConfig UserEventHub
 instance DefaultConfig UserEventHub where
   configDef = UserEventHub "" "" "" ""
+
+data PaymentEventHub = PaymentEventHub { paymentexchange :: String, anaqueue :: String, anakey :: String} deriving (Show, Generic)
+instance FromConfig PaymentEventHub
+instance DefaultConfig PaymentEventHub where
+  configDef = PaymentEventHub"" "" ""
 
 data TaskEventHub = TaskEventHub { taskexchange :: String, 
                                    crtqueue :: String, crtkey :: String,
@@ -57,6 +62,9 @@ setupRabbit cfgPath = do
         createQEXBind (crtqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (crtkey . taskhub $ rabbitCfg) 
         createQBind (cltqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (cltkey . taskhub $ rabbitCfg)
         createQBind (updqueue . taskhub $ rabbitCfg) (taskexchange . taskhub $ rabbitCfg) (updkey . taskhub $ rabbitCfg)
+
+        --payments
+        createQEXBind (anaqueue . paymenthub $ rabbitCfg) (paymentexchange . paymenthub $ rabbitCfg) (anakey . paymenthub $ rabbitCfg) 
       )
 
 getConnection :: MonadResource m => String -> m Connection
