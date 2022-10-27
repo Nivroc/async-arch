@@ -29,6 +29,9 @@ library
       Rabbit
       Auth
   other-modules:
+      Schema.AuditLogEntryMessage
+      Schema.TaskMessage
+      Schema.UserMessage
       Paths_backend
   hs-source-dirs:
       common

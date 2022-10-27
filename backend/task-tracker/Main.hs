@@ -22,7 +22,7 @@ import           Control.Monad.Trans.Resource
 import           Control.Monad.Reader
 import           Control.Applicative ( Applicative(..) )
 import           Web.Scotty.Trans
-import           Network.HTTP.Types ( status500, status400 )
+import           Network.HTTP.Types ( status500, status400, status422 )
 import           Network.AMQP
 import           Database.PostgreSQL.Simple ( close, connectPostgreSQL )
 import           Database.PostgreSQL.Simple.Types (Only(..))
@@ -39,6 +39,7 @@ import           Auth
 import           Control.Arrow ((&&&))
 import           Data.Aeson (decode, encode)
 import           Lens.Micro ((?~))
+
 
 
 
@@ -97,6 +98,8 @@ routes sem = do
 
             post "/create" $ do _ <- login
                                 task :: Task <- jsonData
+                                let brVal = ('[' `elem` jira_id task) || ('[' `elem` jira_id task)
+                                when brVal (actionErr "Invalid jira id. It can no longer contain brackets!" status422)
                                 newUUID <- liftIO nextRandom
                                 userPresent <- checkUserExistsTask (assignee task) >>= maybe (actionErr "Assignee not found" status500) pure . listToMaybe . (fromOnly <$>)
                                 if userPresent then do

@@ -27,6 +27,7 @@ import           Control.Category ((<<<))
 import           Web.Scotty.Trans
 import           Network.HTTP.Types(status500, status401)
 import           Network.AMQP
+import           Network.Mail.SMTP (sendMail, Address (..), simpleMail, plainTextPart)
 import           Database.PostgreSQL.Simple ( close, connectPostgreSQL, withTransaction )
 import           Model
 import           Common
@@ -37,6 +38,7 @@ import           Auth (verifyAgainstAuthService, hasRole, actionErr)
 import           Data.List.NonEmpty (groupBy, NonEmpty, head)
 import           Prelude hiding (head)
 import           Data.Bifoldable (bisequenceA_)
+
 
 
 main :: IO ()
@@ -114,9 +116,14 @@ payBalance auditLog =
     else if totalEarned == 0 then pure (_userid $ head auditLog, 0)
     else addEntry credit "[DEBT]" (_userid $ head auditLog) (-totalEarned)
 
--- TODO: в последнюю очередь
-sendEmail :: Monad m => (UUID, Int) -> m ()
-sendEmail = undefined
+sendEmail :: (MonadIO m, MonadReader RuntimeConfig m, MonadFail m) => (UUID, Int) -> m ()
+sendEmail (uid, amnt) = do user <- getUser uid
+                           smtpHost <- asks $ smtphost . cfg
+                           let from = Address Nothing (T.pack "accounting@papug.inc")
+                           let to = Address Nothing (T.pack $ email user)
+                           let subj = T.pack (("Paystub for " :: String) <> show (fullname user))
+                           let bod = plainTextPart $ TL.pack $ "You have been awarded" <> show amnt <> "PapugCoins"
+                           liftIO $ sendMail smtpHost (simpleMail from [to] [] [] subj [bod])
 
 type MessageReact m a = (a -> m ()) -> (Message, Envelope) -> m ()
 type ConsumerConstraints r m a = (MonadReader r m, MonadResource m, MonadUnliftIO m)

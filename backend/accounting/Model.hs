@@ -32,6 +32,7 @@ data ApplicationConfig = AppCfg { port :: Int,
                                   postgres :: PostgresSettings,
                                   authid :: String,
                                   authsecret :: String,
+                                  smtphost :: String,
                                   userhub :: UserEventHub,
                                   taskhub :: TaskEventHub,
                                   paymenthub :: PaymentEventHub
@@ -40,7 +41,7 @@ data ApplicationConfig = AppCfg { port :: Int,
 instance FromConfig ApplicationConfig
 instance DefaultConfig ApplicationConfig where
   configDef :: ApplicationConfig
-  configDef = AppCfg 8080 configDef "" "" configDef configDef configDef 
+  configDef = AppCfg 8080 configDef "" "" "" configDef configDef configDef 
 
 data Task = Task { uuid :: UUID, 
                    title :: String, 
