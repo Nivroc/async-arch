@@ -1,3 +1,11 @@
+This is a full Haskell implementation of a Task tracker system, using Haskell, RabbitMQ and Postgres, leveraging DDD and EventStorming Approaches and using SSO for authentication and authorization.
+The system contains the following microservices:
+- authentication
+- accounting
+- analytics
+- task-tracker
+
+
 # 1. Requirements Analysis
 ## Task tracker
 
@@ -26,6 +34,7 @@
     - Command - Complete Task
     - Data - Task Info, User Info
     - Event - User.TaskClosed
+      
 ## Accounting
  - Regular popugs should only have access to information about their own accounts (audit log + current balance).
     - Actor - Worker
