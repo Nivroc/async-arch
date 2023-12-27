@@ -32,6 +32,7 @@ library
       Schema.AuditLogEntryMessage
       Schema.TaskMessage
       Schema.UserMessage
+
       Paths_backend
   hs-source-dirs:
       common
@@ -176,6 +177,7 @@ executable auth
   hs-source-dirs:
       auth
       common
+      
   default-extensions:
       OverloadedStrings
       FlexibleInstances
@@ -223,6 +225,7 @@ executable tasktracker
   hs-source-dirs:
       task-tracker
       common
+      
   default-extensions:
       OverloadedStrings
       FlexibleInstances
@@ -230,7 +233,9 @@ executable tasktracker
       MultiParamTypeClasses
       DeriveGeneric
       DeriveAnyClass
+      
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+
   build-depends:
       aeson
     , amqp

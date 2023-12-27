@@ -103,6 +103,7 @@ executables:
     - accounting
     - common
     other-modules: Database, Model, Common, Rabbit, Auth
+
     ghc-options:
     - -threaded
     - -rtsopts
@@ -125,7 +126,7 @@ executables:
     - -dsuppress-all 
     - -dno-suppress-type-signatures 
     - -ddump-to-file  
-  
+
 
 
 
