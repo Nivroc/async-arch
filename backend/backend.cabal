@@ -26,7 +26,13 @@ source-repository head
 library
   exposed-modules:
       Common
+      Rabbit
+      Auth
   other-modules:
+      Schema.AuditLogEntryMessage
+      Schema.TaskMessage
+      Schema.UserMessage
+
       Paths_backend
   hs-source-dirs:
       common
@@ -40,16 +46,22 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       aeson
+    , amqp
     , base >=4.7 && <5
     , bytestring
     , conferer
     , containers
+    , http-client
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
+    , random
     , regex-compat
+    , req
     , resourcet
     , scotty
     , smtp-mail
@@ -57,6 +69,101 @@ library
     , time
     , transformers
     , transformers-base
+    , unliftio-core
+    , uri-bytestring
+    , uuid
+    , validation-selective
+    , wai-cors
+  default-language: Haskell2010
+
+executable accounting
+  main-is: Main.hs
+  other-modules:
+      Database, Model, Common, Rabbit, Auth
+  hs-source-dirs:
+      accounting
+      common
+  default-extensions:
+      OverloadedStrings
+      FlexibleInstances
+      FlexibleContexts
+      MultiParamTypeClasses
+      DeriveGeneric
+      DeriveAnyClass
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+  build-depends:
+      aeson
+    , amqp
+    , base >=4.7 && <5
+    , bytestring
+    , conferer
+    , containers
+    , http-client
+    , http-types
+    , jwt
+    , lifted-base
+    , microlens
+    , monad-control
+    , mtl
+    , postgresql-simple
+    , random
+    , regex-compat
+    , req
+    , resourcet
+    , scotty
+    , smtp-mail
+    , text
+    , time
+    , transformers
+    , transformers-base
+    , unliftio-core
+    , uri-bytestring
+    , uuid
+    , validation-selective
+    , wai-cors
+  default-language: Haskell2010
+
+executable analytics
+  main-is: Main.hs
+  other-modules:
+      Database, Model, Common, Rabbit, Auth
+  hs-source-dirs:
+      analytics
+      common
+  default-extensions:
+      OverloadedStrings
+      FlexibleInstances
+      FlexibleContexts
+      MultiParamTypeClasses
+      DeriveGeneric
+      DeriveAnyClass
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+  build-depends:
+      aeson
+    , amqp
+    , base >=4.7 && <5
+    , bytestring
+    , conferer
+    , containers
+    , http-client
+    , http-types
+    , jwt
+    , lifted-base
+    , microlens
+    , monad-control
+    , mtl
+    , postgresql-simple
+    , random
+    , regex-compat
+    , req
+    , resourcet
+    , scotty
+    , smtp-mail
+    , text
+    , time
+    , transformers
+    , transformers-base
+    , unliftio-core
     , uri-bytestring
     , uuid
     , validation-selective
@@ -66,9 +173,11 @@ library
 executable auth
   main-is: Main.hs
   other-modules:
-      Database, Model, Common
+      Database, Model, Common, Rabbit, Auth
   hs-source-dirs:
-      auth, common
+      auth
+      common
+      
   default-extensions:
       OverloadedStrings
       FlexibleInstances
@@ -76,19 +185,25 @@ executable auth
       MultiParamTypeClasses
       DeriveGeneric
       DeriveAnyClass
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -ddump-simpl -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
   build-depends:
       aeson
+    , amqp
     , base >=4.7 && <5
     , bytestring
     , conferer
     , containers
+    , http-client
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
+    , random
     , regex-compat
+    , req
     , resourcet
     , scotty
     , smtp-mail
@@ -96,6 +211,7 @@ executable auth
     , time
     , transformers
     , transformers-base
+    , unliftio-core
     , uri-bytestring
     , uuid
     , validation-selective
@@ -105,9 +221,11 @@ executable auth
 executable tasktracker
   main-is: Main.hs
   other-modules:
-      Database, Model, Common
+      Database, Model, Common, Rabbit, Auth
   hs-source-dirs:
-      task-tracker, common
+      task-tracker
+      common
+      
   default-extensions:
       OverloadedStrings
       FlexibleInstances
@@ -115,19 +233,27 @@ executable tasktracker
       MultiParamTypeClasses
       DeriveGeneric
       DeriveAnyClass
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -ddump-simpl -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+      
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -O2 -dsuppress-all -dno-suppress-type-signatures -ddump-to-file
+
   build-depends:
       aeson
+    , amqp
     , base >=4.7 && <5
     , bytestring
     , conferer
     , containers
+    , http-client
     , http-types
     , jwt
+    , lifted-base
     , microlens
+    , monad-control
     , mtl
     , postgresql-simple
+    , random
     , regex-compat
+    , req
     , resourcet
     , scotty
     , smtp-mail
@@ -135,6 +261,7 @@ executable tasktracker
     , time
     , transformers
     , transformers-base
+    , unliftio-core
     , uri-bytestring
     , uuid
     , validation-selective
